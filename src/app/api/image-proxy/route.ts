@@ -1,11 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 
-/**
- * GET /api/image-proxy?url=<encoded-image-url>
- *
- * Server-side image proxy used by the PDF generator to fetch external images
- * without being blocked by browser CORS policies.
- */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const url = searchParams.get("url");
@@ -14,7 +8,6 @@ export async function GET(request: NextRequest) {
     return new NextResponse("Missing url parameter", { status: 400 });
   }
 
-  // Validate that the URL is a proper http/https URL
   let parsedUrl: URL;
   try {
     parsedUrl = new URL(url);
@@ -28,7 +21,6 @@ export async function GET(request: NextRequest) {
   try {
     const response = await fetch(parsedUrl.toString(), {
       headers: {
-        // Mimic a regular browser request
         "User-Agent": "Mozilla/5.0",
         Accept: "image/*,*/*",
       },

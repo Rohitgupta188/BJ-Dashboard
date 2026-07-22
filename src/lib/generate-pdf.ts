@@ -1,39 +1,6 @@
 import { CatalogueItem } from "@/components/dashboard/catalogue-view";
 
-// Load jsPDF from CDN dynamically (deduplicated loading)
-async function loadJsPDF(): Promise<any> {
-  if (typeof window === "undefined") return null;
-
-  if ((window as any).jspdf?.jsPDF) {
-    return (window as any).jspdf.jsPDF;
-  }
-
-  return new Promise((resolve, reject) => {
-    // Prevent duplicate <script> tags
-    const existing = document.querySelector('script[src*="jspdf"]') as HTMLScriptElement | null;
-    if (existing) {
-      existing.addEventListener("load", () => {
-        if ((window as any).jspdf?.jsPDF) resolve((window as any).jspdf.jsPDF);
-        else reject(new Error("jsPDF script loaded but global not found."));
-      });
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
-    script.onload = () => {
-      if ((window as any).jspdf?.jsPDF) {
-        resolve((window as any).jspdf.jsPDF);
-      } else {
-        reject(new Error("jsPDF loaded but global object was not found."));
-      }
-    };
-    script.onerror = () => {
-      reject(new Error("Failed to load jsPDF from CDN."));
-    };
-    document.head.appendChild(script);
-  });
-}
+import { jsPDF } from "jspdf";
 
 /**
  * Detect the image format from a base64 Data URL so jsPDF gets the right hint.
@@ -113,12 +80,7 @@ function drawPDFTable(
 export async function generateCatalogPDF(cart: CatalogueItem[]): Promise<void> {
   if (cart.length === 0) return;
 
-  const JsPDFClass = await loadJsPDF();
-  if (!JsPDFClass) {
-    throw new Error("jsPDF could not be loaded. Make sure you are in a browser environment.");
-  }
-
-  const doc = new JsPDFClass({
+  const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
     format: "a4",
@@ -215,7 +177,7 @@ export async function generateCatalogPDF(cart: CatalogueItem[]): Promise<void> {
     const headers = ["Sr", "Design No", "Gross Wt.", "Net Wt.", "KT", "Size"];
     const netWeight = item.netWeight !== undefined ? item.netWeight : item.grossWeight;
     const purity = item.metalPurity ? item.metalPurity.replace(/\s*kt\s*/gi, "") : "9";
-    
+
     const rows = [
       [
         (i + 1).toString(),
@@ -226,7 +188,7 @@ export async function generateCatalogPDF(cart: CatalogueItem[]): Promise<void> {
         "0"
       ]
     ];
-    
+
     // Column widths summing to 85mm
     const widths = [8, 30, 16, 16, 8, 7];
     drawPDFTable(doc, headers, rows, x, y + 60, widths, 6);
@@ -269,7 +231,7 @@ export async function generateCatalogPDF(cart: CatalogueItem[]): Promise<void> {
   // Summary table height: header (8mm) + rows (groups.length * 8mm) + total row (8mm) + title (10mm) = ~26mm + (groups.length * 8mm)
   const summaryHeight = 26 + groups.length * 8;
   const remainingItemsCount = cart.length % 4;
-  
+
   // Y coordinate where the last item block ended on the last page
   let endY = startY;
   if (remainingItemsCount > 0) {
@@ -297,7 +259,7 @@ export async function generateCatalogPDF(cart: CatalogueItem[]): Promise<void> {
   doc.setFontSize(12);
   doc.setTextColor(197, 160, 89);
   doc.text("QUOTATION SUMMARY", margin, currentY);
-  
+
   // Decorative underline under title
   doc.setDrawColor(197, 160, 89);
   doc.setLineWidth(0.3);
@@ -306,7 +268,7 @@ export async function generateCatalogPDF(cart: CatalogueItem[]): Promise<void> {
   // Table Columns Setup (Total width 180mm)
   const summaryHeaders = ["Sr.", "Item Type", "Qty", "Gross Wt", "Net Wt"];
   const summaryWidths = [12, 78, 20, 35, 35];
-  
+
   const summaryRows = groups.map((g, idx) => [
     (idx + 1).toString(),
     g.itemType,
@@ -322,7 +284,7 @@ export async function generateCatalogPDF(cart: CatalogueItem[]): Promise<void> {
   const finalY = currentY + 4 + (groups.length + 1) * 7;
   doc.setFillColor(230, 230, 230);
   doc.rect(margin, finalY, summaryWidths[0] + summaryWidths[1], 7, "F");
-  
+
   // Cells borders
   doc.setDrawColor(0, 0, 0);
   doc.rect(margin, finalY, summaryWidths[0] + summaryWidths[1], 7);

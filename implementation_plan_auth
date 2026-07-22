@@ -1,0 +1,47 @@
+# Implementation Plan: User Profile and Password Management
+
+## Overview
+Based on the existing Zod schemas in `user.schema.ts`, we need to implement the backend API routes and the necessary database modifications to support Forgot Password, Reset Password, Update Profile, and Change Password functionality.
+
+## Proposed Changes
+
+### 1. Database Model Updates
+#### [MODIFY] [User.ts](file:///c:/Users/Brahammand%20Accounts/Desktop/Dashboard/dashboard/src/models/User.ts)
+- Add `resetPasswordToken` (String) to store the hashed token for password resets.
+- Add `resetPasswordExpires` (Date) to set an expiration time for the reset token (typically 1 hour).
+
+### 2. Authentication Service Updates
+#### [MODIFY] [auth.service.ts](file:///c:/Users/Brahammand%20Accounts/Desktop/Dashboard/dashboard/src/lib/auth/auth.service.ts)
+- Add functions to handle the logic:
+  - `generatePasswordResetToken(user: IUser)`: Generates a random crypto token, hashes it for the DB, and sets expiry.
+  - `changeUserPassword(userId: string, data: ChangePasswordInput)`: Validates old password and sets the new one.
+  - `updateUserProfile(userId: string, data: UpdateUserProfileInput)`: Updates username/email and handles potential email uniqueness collisions.
+
+### 3. New API Routes
+#### [NEW] `src/app/api/auth/forgot-password/route.ts`
+- Accepts `email` (using `forgotPasswordSchema`).
+- Finds user, generates a reset token.
+- **Note on Emailing**: Since this is a production-grade app, we would typically send an email with the reset link. 
+
+#### [NEW] `src/app/api/auth/reset-password/route.ts`
+- Accepts `token` and `newPassword` (using `resetPasswordSchema`).
+- Finds the user by the hashed token where `resetPasswordExpires` > `Date.now()`.
+- Updates the password and clears the reset fields.
+
+#### [NEW] `src/app/api/users/profile/route.ts`
+- **PATCH**: Uses `updateUserProfileSchema` to allow an authenticated user to update their `username` or `email`.
+- Protected by `withAuth`.
+
+#### [NEW] `src/app/api/users/change-password/route.ts`
+- **POST**: Uses `changePasswordSchema` to allow an authenticated user to change their password by providing the `currentPassword` and `newPassword`.
+- Protected by `withAuth`.
+
+## Open Questions
+
+> [!IMPORTANT]
+> **Email Sending for Forgot Password**
+> To make the "Forgot Password" flow actually work, the system needs to email the user a link (e.g. `https://yourdomain.com/reset-password?token=xyz`).
+> Do you have an email provider set up (like Resend, SendGrid, Amazon SES, or Nodemailer with SMTP)?
+> If not, how would you like me to handle the token generation? I can implement the logic and log the reset link to the console for now until you set up an email provider.
+
+Please review the plan and let me know how to proceed regarding the email provider!

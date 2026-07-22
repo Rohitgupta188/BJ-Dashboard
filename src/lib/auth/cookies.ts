@@ -1,11 +1,12 @@
 import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
 
-const ACCESS_COOKIE = "access_token";
-const REFRESH_COOKIE = "refresh_token";
+export const ACCESS_COOKIE = "access_token";
+export const REFRESH_COOKIE = "refresh_token";
 
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
 
-function baseCookieOptions(maxAgeSeconds: number) {
+export function baseCookieOptions(maxAgeSeconds: number) {
   return {
     maxAge: maxAgeSeconds,
     httpOnly: true,
@@ -17,20 +18,33 @@ function baseCookieOptions(maxAgeSeconds: number) {
 
 export async function setAuthCookies(
   accessToken: string,
-  refreshToken: string
+  refreshToken: string,
+  res?: NextResponse
 ) {
-  const cookieStore = await cookies();
-
-  cookieStore.set(
-    ACCESS_COOKIE,
-    accessToken,
-    baseCookieOptions(15 * 60) // 15 min
-  );
-  cookieStore.set(
-    REFRESH_COOKIE,
-    refreshToken,
-    baseCookieOptions(7 * 24 * 60 * 60) // 7 days
-  );
+  if (res) {
+    res.cookies.set(
+      ACCESS_COOKIE,
+      accessToken,
+      baseCookieOptions(30 * 60) // 30 min
+    );
+    res.cookies.set(
+      REFRESH_COOKIE,
+      refreshToken,
+      baseCookieOptions(7 * 24 * 60 * 60) // 7 days
+    );
+  } else {
+    const cookieStore = await cookies();
+    cookieStore.set(
+      ACCESS_COOKIE,
+      accessToken,
+      baseCookieOptions(30 * 60) // 30 min
+    );
+    cookieStore.set(
+      REFRESH_COOKIE,
+      refreshToken,
+      baseCookieOptions(7 * 24 * 60 * 60) // 7 days
+    );
+  }
 }
 
 export async function getAccessToken(): Promise<string | undefined> {
@@ -43,8 +57,13 @@ export async function getRefreshToken(): Promise<string | undefined> {
   return cookieStore.get(REFRESH_COOKIE)?.value;
 }
 
-export async function clearAuthCookies() {
-  const cookieStore = await cookies();
-  cookieStore.delete(ACCESS_COOKIE);
-  cookieStore.delete(REFRESH_COOKIE);
+export async function clearAuthCookies(res?: NextResponse) {
+  if (res) {
+    res.cookies.delete(ACCESS_COOKIE);
+    res.cookies.delete(REFRESH_COOKIE);
+  } else {
+    const cookieStore = await cookies();
+    cookieStore.delete(ACCESS_COOKIE);
+    cookieStore.delete(REFRESH_COOKIE);
+  }
 }

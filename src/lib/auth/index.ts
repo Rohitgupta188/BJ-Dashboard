@@ -10,7 +10,7 @@ export {
   clearAuthCookies,
 } from "./cookies";
 
-export { withAuth, getCurrentUser } from "./middleware";
-export type { AuthenticatedRequest } from "./middleware";
+export { withAuth, getCurrentUser } from "./with-auth";
+export type { AuthenticatedRequest } from "./with-auth";
 
-export { registerUser, loginUser, logoutUser, sanitizeUser } from "./auth.service";
+export { registerUser, loginUser, logoutUser, sanitizeUser, rotateRefreshToken } from "./auth.service";

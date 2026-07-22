@@ -1,34 +1,29 @@
-// models/Catalog.ts
-
 import mongoose, { Schema, Document, models, model } from "mongoose";
 
 export interface ICatalog extends Document {
-  designNumber: string; // Our primary business key
-
-  rfid: string;
   sku: string;
+  designNumber: string;
+  rfid: string;
 
   imageName: string;
-  storageProvider?: string;   // backblaze
-  storagePath?: string;       // catalog/DZER-11742.jpg
-  imageUrl?: string;
-  imageKitFileId?: string;
+  storageProvider: "backblaze";
+  storagePath: string;
+  imageUrl: string;
+  imageKitFileId: string;
 
-  itemStatus: string;
-
-  itemType: string;
+  itemStatus: "CATALOGUE" | "INSTOCK";
+  itemType?: string;
 
   isCatalog: boolean;
-
   isInstock: boolean;
 
   grossWeight: number;
   netWeight: number;
+  stoneWeight: number;
 
   collectionLine: string;
   metalType: string;
   metalPurity: string;
-  StoneWeight: string;
 
   createdAt: Date;
   updatedAt: Date;
@@ -36,35 +31,34 @@ export interface ICatalog extends Document {
 
 const CatalogSchema = new Schema<ICatalog>(
   {
+    sku: {
+      type: String,
+      required: true,
+      unique: true,
+      trim: true,
+    },
 
     designNumber: {
       type: String,
       required: true,
-      index: true,
+      index: true, 
       trim: true,
     },
 
     rfid: {
       type: String,
       required: true,
-      index: true,
-    },
-
-    sku: {
-      type: String,
-      required: true,
-      unique: true,
-      index: true,
+      trim: true,
     },
 
     imageName: {
       type: String,
       required: true,
+      trim: true,
     },
 
     storageProvider: {
       type: String,
-      enum: ["backblaze", "imagekit"],
       default: "backblaze",
     },
 
@@ -88,7 +82,10 @@ const CatalogSchema = new Schema<ICatalog>(
       index: true,
     },
 
-    itemType: String,
+    itemType: {
+      type: String,
+      trim: true,
+    },
 
     isCatalog: {
       type: Boolean,
@@ -102,21 +99,41 @@ const CatalogSchema = new Schema<ICatalog>(
       index: true,
     },
 
-    grossWeight: Number,
-    netWeight: Number,
+    grossWeight: {
+      type: Number,
+      min: 0,
+    },
 
-    collectionLine: String,
-    metalType: String,
-    metalPurity: String,
-    StoneWeight: Number,
+    netWeight: {
+      type: Number,
+      min: 0,
+    },
 
+    stoneWeight: {
+      type: Number,
+      min: 0,
+    },
+
+    collectionLine: {
+      type: String,
+      trim: true,
+    },
+
+    metalType: {
+      type: String,
+      trim: true,
+    },
+
+    metalPurity: {
+      type: String,
+      trim: true,
+    },
   },
   {
     timestamps: true,
+    collection: "catalogs",
   }
 );
-
-CatalogSchema.index({ designNumber: 1, sku: 1, });
 
 const Catalog =
   (models.Catalog as mongoose.Model<ICatalog>) ||

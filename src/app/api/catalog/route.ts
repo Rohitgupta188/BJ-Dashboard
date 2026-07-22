@@ -1,34 +1,17 @@
-/**
- * app/api/catalog/route.ts
- *
- * GET /api/catalog
- *
- * Returns a paginated list of catalog items with the fields needed
- * for the catalog view: image, Design Number, Gr Wt, Metal Purity, Metal Type.
- *
- * Query params (all optional):
- *   page        - page number, default 1
- *   limit       - items per page, default 24
- *   search      - matches against designNumber (case-insensitive)
- *   itemStatus  - exact match filter: "CATALOGUE" | "INSTOCK" (derived field, kept for backward compat)
- *   isCatalog   - "true" | "false" — filters on the real source-of-truth flag
- *   isInstock   - "true" | "false" — filters on the real source-of-truth flag
- *   metalPurity - exact match filter, e.g. "9KT"
- *   metalType   - exact match filter, e.g. "Yellow Gold"
- */
-
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/db";
-import Catalog from "@/models/Catalog";
+import Catalog, { type ICatalog } from "@/models/Catalog";
+import { withAuth } from "@/lib/auth";
+import { handleRoute } from "@/lib/api-response";
 
-export async function GET(request: NextRequest) {
-  try {
+export const GET = withAuth(async (request: NextRequest) => {
+  return handleRoute(async () => {
     await connectToDatabase();
 
     const { searchParams } = new URL(request.url);
 
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
-    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "24", 10)));
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "25", 10)));
     const search = searchParams.get("search")?.trim();
     const itemStatus = searchParams.get("itemStatus")?.trim();
     const isCatalog = searchParams.get("isCatalog")?.trim();
@@ -36,16 +19,19 @@ export async function GET(request: NextRequest) {
     const metalPurity = searchParams.get("metalPurity")?.trim();
     const metalType = searchParams.get("metalType")?.trim();
 
-    // Only show items that actually have an image uploaded.
     const filter: Record<string, unknown> = {
       imageUrl: { $exists: true, $ne: null },
     };
 
     if (search) {
-      filter.designNumber = { $regex: search, $options: "i" };
+      filter.$or = [
+        { designNumber: { $regex: search, $options: "i" } },
+        { sku: { $regex: search, $options: "i" } },
+      ];
     }
+    
     if (itemStatus) {
-      filter.itemStatus = itemStatus; // "CATALOGUE" | "INSTOCK"
+      filter.itemStatus = itemStatus;
     }
     if (isCatalog !== undefined && isCatalog !== "") {
       filter.isCatalog = isCatalog === "true";
@@ -74,7 +60,7 @@ export async function GET(request: NextRequest) {
       Catalog.countDocuments(filter),
     ]);
 
-    const catalog = items.map((item: any) => ({
+    const catalog = (items as unknown as ICatalog[]).map((item) => ({
       designNumber: item.designNumber,
       rfid: item.rfid,
       sku: item.sku,
@@ -99,11 +85,5 @@ export async function GET(request: NextRequest) {
         totalPages: Math.ceil(total / limit),
       },
     });
-  } catch (error) {
-    console.error("GET /api/catalog error:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch catalog" },
-      { status: 500 }
-    );
-  }
-}
+  });
+});

@@ -41,16 +41,16 @@ async function main() {
     $or: [{ imageUrl: { $exists: false } }, { imageUrl: null }],
   })
     .select("designNumber imageName")
-    .sort({ designNumber: 1 })
+    .sort({ imageName: 1 })
     .lean();
 
-  // ── Console preview (first 20) ──────────────────────────────────────────
-  console.log("Missing (first 20):");
-  docs.slice(0, 20).forEach((d: any) => {
+  // ── Console preview (first 5) ──────────────────────────────────────────
+  console.log("Missing (first 5):");
+  docs.slice(0, 5).forEach((d: any) => {
     console.log(`  ${d.designNumber.padEnd(20)} ${d.imageName}`);
   });
-  if (docs.length > 20) {
-    console.log(`  ...and ${docs.length - 20} more (see log files)\n`);
+  if (docs.length > 5) {
+    console.log(`  ...and ${docs.length - 5} more (see log files)\n`);
   }
 
   // ── Write log files ─────────────────────────────────────────────────────
@@ -61,7 +61,7 @@ async function main() {
   const txtPath = path.join(logsDir, "missing-images.txt");
   fs.writeFileSync(
     txtPath,
-    docs.map((d: any) => d.imageName).join("\n"),
+    [...new Set(docs.map((d: any) => d.imageName))].join("\n"),
     "utf8"
   );
 

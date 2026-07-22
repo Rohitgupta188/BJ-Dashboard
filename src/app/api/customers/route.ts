@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/db";
 import Customer from "@/models/Customer";
 import { customerSchema } from "@/lib/validation/customer.schema";
-import { z } from 'zod'
+import { withAuth } from "@/lib/auth";
+import { handleRoute, validationError } from "@/lib/api-response";
 
-// GET /api/customers?search=ayansh&page=1&pageSize=10
-export async function GET(req: NextRequest) {
-  try {
+export const GET = withAuth(async (req: NextRequest) => {
+  return handleRoute(async () => {
     await connectToDatabase();
 
     const { searchParams } = new URL(req.url);
@@ -16,14 +16,14 @@ export async function GET(req: NextRequest) {
 
     const filter = search
       ? {
-        $or: [
-          { name: { $regex: search, $options: "i" } },
-          { contactName: { $regex: search, $options: "i" } },
-          { email: { $regex: search, $options: "i" } },
-          { phone: { $regex: search, $options: "i" } },
-          { address: { $regex: search, $options: "i" } },
-        ],
-      }
+          $or: [
+            { name: { $regex: search, $options: "i" } },
+            { contactName: { $regex: search, $options: "i" } },
+            { email: { $regex: search, $options: "i" } },
+            { phone: { $regex: search, $options: "i" } },
+            { address: { $regex: search, $options: "i" } },
+          ],
+        }
       : {};
 
     const [customers, total] = await Promise.all([
@@ -36,57 +36,23 @@ export async function GET(req: NextRequest) {
     ]);
 
     return NextResponse.json({ customers, total, page, pageSize });
-  } catch (error) {
-    console.error("GET /api/customers failed:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch customers." },
-      { status: 500 }
-    );
-  }
-}
+  });
+});
 
 // POST /api/customers
-export async function POST(req: NextRequest) {
-  try {
+export const POST = withAuth(async (req: NextRequest) => {
+  return handleRoute(async () => {
     await connectToDatabase();
 
     const body = await req.json();
     const parsed = customerSchema.safeParse(body);
 
     if (!parsed.success) {
-      return Response.json(
-        {
-          success: false,
-          message: "Validation failed",
-          errors: z.treeifyError(parsed.error),
-        },
-        { status: 400 }
-      );
+      return validationError(parsed.error);
     }
 
-    const { name, email, contactName, phone, address } = parsed.data;
-
-    if (!name || !contactName || !phone || !address) {
-      return NextResponse.json(
-        { error: "Name, contact name, phone, and address are required." },
-        { status: 400 }
-      );
-    }
-
-    const customer = await Customer.create({
-      name,
-      email,
-      contactName,
-      phone,
-      address,
-    });
+    const customer = await Customer.create(parsed.data);
 
     return NextResponse.json({ customer }, { status: 201 });
-  } catch (error) {
-    console.error("POST /api/customers failed:", error);
-    return NextResponse.json(
-      { error: "Failed to create customer." },
-      { status: 500 }
-    );
-  }
-}
+  });
+});

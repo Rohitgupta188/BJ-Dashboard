@@ -43,7 +43,6 @@ const CustomerSchema = new Schema<ICustomer>(
   { timestamps: true }
 );
 
-// Prevents "Cannot overwrite model" errors during Next.js hot reload.
 const Customer =
   (models.Customer as mongoose.Model<ICustomer>) ||
   model<ICustomer>("Customer", CustomerSchema);

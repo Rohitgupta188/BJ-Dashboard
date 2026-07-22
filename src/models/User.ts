@@ -4,8 +4,10 @@ export interface IUser extends Document {
   username: string;
   email: string;
   password: string;
-  /** SHA-256 hash of the raw refresh token — never stored in plain text */
+  role: "admin" | "employee";
   refreshTokenHash: string | null;
+  lastRefreshTokenHash: string | null;
+  refreshTokenRotatedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -31,8 +33,23 @@ const UserSchema: Schema = new Schema<IUser>(
       minlength: 6,
       select: false,
     },
+    role: {
+      type: String,
+      enum: ["admin", "employee"],
+      default: "employee",
+    },
     refreshTokenHash: {
       type: String,
+      default: null,
+      select: false,
+    },
+    lastRefreshTokenHash: {
+      type: String,
+      default: null,
+      select: false,
+    },
+    refreshTokenRotatedAt: {
+      type: Date,
       default: null,
       select: false,
     },

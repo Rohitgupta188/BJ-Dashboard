@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import QRButton from "../qrbutton";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 // Matches the shape returned by app/api/catalog/route.ts, which mirrors ICatalog
@@ -87,7 +88,7 @@ export default function CatalogueView({ cart = [], onToggleCart }: CatalogueView
     try {
       const params = new URLSearchParams({
         page: String(currentPage),
-        limit: "24",
+        limit: "25",
       });
       if (debouncedSearch) params.set("search", debouncedSearch);
       if (itemStatus !== "ALL") params.set("itemStatus", itemStatus);
@@ -131,10 +132,11 @@ export default function CatalogueView({ cart = [], onToggleCart }: CatalogueView
           </div>
           {/* Item status selector */}
           <Select value={itemStatus} onValueChange={(v) => { setItemStatus(v as "ALL" | "CATALOGUE" | "INSTOCK"); setCurrentPage(1); }}>
-            <SelectTrigger className="w-[150px] h-9 text-xs bg-muted/30 border-border text-foreground focus:ring-primary hover:bg-muted/50 transition-colors">
+            <SelectTrigger className="w-37.5 h-9 text-xs bg-muted/30 border-border text-foreground focus:ring-primary hover:bg-muted/50 transition-colors">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-popover border-border">
+              <SelectItem value="ALL">All</SelectItem>
               <SelectItem value="CATALOGUE">Catalogue</SelectItem>
               <SelectItem value="INSTOCK">In Stock</SelectItem>
             </SelectContent>
@@ -246,6 +248,9 @@ export default function CatalogueView({ cart = [], onToggleCart }: CatalogueView
                   <p className="text-[10px] text-muted-foreground/60 uppercase tracking-widest mt-0.5">
                     {product.metalType}
                   </p>
+                </div>
+                <div className="mt-2 flex justify-center">
+                  <QRButton sku={product.sku} productName={product.designNumber} />
                 </div>
               </CardContent>
             </Card>

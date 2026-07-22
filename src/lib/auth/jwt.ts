@@ -16,6 +16,7 @@ export interface JwtPayload {
   sub: string; // userId
   email: string;
   username: string;
+  role: "admin" | "employee";
   type: "access" | "refresh";
 }
 
@@ -53,7 +54,6 @@ export async function signTokenPair(
   return { accessToken, refreshToken };
 }
 
-/** SHA-256 hash of a raw token string — safe to persist in DB */
 export async function hashToken(token: string): Promise<string> {
   const buf = await crypto.subtle.digest(
     "SHA-256",
