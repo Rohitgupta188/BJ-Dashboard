@@ -1,7 +1,7 @@
-import { S3Client, PutObjectCommand, HeadObjectCommand, ListObjectsV2Command  } from "@aws-sdk/client-s3";
-
-import fs from "fs";
+import { S3Client, PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import path from "path";
+
+// ─── Environment validation ───────────────────────────────────────────────────
 
 const REQUIRED_ENV = [
   "B2_BUCKET_NAME",
@@ -9,13 +9,15 @@ const REQUIRED_ENV = [
   "B2_ENDPOINT",
   "B2_ACCESS_KEY_ID",
   "B2_SECRET_ACCESS_KEY",
-];
+] as const;
 
 for (const key of REQUIRED_ENV) {
   if (!process.env[key]) {
-    throw new Error(`Missing ${key} in .env.local — required for Backblaze B2 uploads.`);
+    throw new Error(`Missing ${key} — required for Backblaze B2. Add it to .env.local.`);
   }
 }
+
+// ─── S3-compatible client (Backblaze B2) ─────────────────────────────────────
 
 export const s3Client = new S3Client({
   endpoint: process.env.B2_ENDPOINT,
@@ -24,37 +26,40 @@ export const s3Client = new S3Client({
     accessKeyId: process.env.B2_ACCESS_KEY_ID as string,
     secretAccessKey: process.env.B2_SECRET_ACCESS_KEY as string,
   },
-  // Required for B2's S3-compatible API
+  // Required for Backblaze's S3-compatible API
   forcePathStyle: true,
-});
-
-console.log({
-  endpoint: process.env.B2_ENDPOINT,
-  region: process.env.B2_REGION,
-  bucket: process.env.B2_BUCKET_NAME,
 });
 
 export const BUCKET_NAME = process.env.B2_BUCKET_NAME as string;
 export const DEFAULT_UPLOAD_FOLDER = "catalog";
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 const CONTENT_TYPE_BY_EXT: Record<string, string> = {
-  ".jpg": "image/jpeg",
+  ".jpg":  "image/jpeg",
   ".jpeg": "image/jpeg",
-  ".png": "image/png",
+  ".png":  "image/png",
   ".webp": "image/webp",
-  ".gif": "image/gif",
+  ".gif":  "image/gif",
 };
 
-function getContentType(filePath: string): string {
-  const ext = path.extname(filePath).toLowerCase();
-  return CONTENT_TYPE_BY_EXT[ext] || "application/octet-stream";
+export function getContentType(fileName: string): string {
+  const ext = path.extname(fileName).toLowerCase();
+  return CONTENT_TYPE_BY_EXT[ext] ?? "application/octet-stream";
 }
 
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+/**
+ * Check if an object already exists in the bucket without downloading it.
+ * Used by the batch script as an idempotency guard.
+ */
 export async function objectExistsInBucket(objectKey: string): Promise<boolean> {
   try {
     await s3Client.send(new HeadObjectCommand({ Bucket: BUCKET_NAME, Key: objectKey }));
     return true;
   } catch (err: any) {
+    // B2 returns 404 for missing objects
     if (err?.name === "NotFound" || err?.$metadata?.httpStatusCode === 404) {
       return false;
     }
@@ -62,14 +67,53 @@ export async function objectExistsInBucket(objectKey: string): Promise<boolean> 
   }
 }
 
+/**
+ * Upload a raw Buffer or Uint8Array directly to Backblaze.
+ * Used by the Drive webhook handler (no disk I/O needed on serverless).
+ *
+ * @param buffer      - File bytes
+ * @param fileName    - Final filename stored in the bucket (e.g. "TRTP001.jpg")
+ * @param contentType - MIME type (e.g. "image/jpeg")
+ * @param folder      - Bucket folder prefix. Defaults to "catalog"
+ * @returns           - The full object key stored in the bucket
+ */
+export async function uploadBufferToBackblaze(
+  buffer: Buffer | Uint8Array,
+  fileName: string,
+  contentType: string,
+  folder: string = DEFAULT_UPLOAD_FOLDER
+): Promise<{ key: string }> {
+  const objectKey = `${folder}/${fileName}`;
+
+  await s3Client.send(
+    new PutObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: objectKey,
+      Body: buffer,
+      ContentType: contentType,
+    })
+  );
+
+  return { key: objectKey };
+}
+
+/**
+ * Upload a local file from disk to Backblaze.
+ * Used by the batch import scripts that run locally (not on Vercel).
+ *
+ * @param localFilePath - Absolute path to the file on disk
+ * @param fileName      - Final filename stored in the bucket
+ * @param folder        - Bucket folder prefix. Defaults to "catalog"
+ */
 export async function uploadToBackblaze(
   localFilePath: string,
   fileName: string,
   folder: string = DEFAULT_UPLOAD_FOLDER
 ): Promise<{ key: string }> {
+  const { createReadStream } = await import("fs");
   const objectKey = `${folder}/${fileName}`;
-  const fileStream = fs.createReadStream(localFilePath);
-  const contentType = getContentType(localFilePath);
+  const fileStream = createReadStream(localFilePath);
+  const contentType = getContentType(fileName);
 
   await s3Client.send(
     new PutObjectCommand({

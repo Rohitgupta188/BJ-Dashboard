@@ -6,6 +6,7 @@ import {
   MapPin, Phone, MessageSquare, ChevronDown
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { buildQuotationPDF, PdfQuotationLineItem } from "@/lib/generate-quotation-pdf";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface LineItem {
@@ -41,290 +42,7 @@ interface Props {
 // ── localStorage cache key ─────────────────────────────────────────────────────
 const CACHE_KEY = "bj_employee_quotation_form";
 
-// ── Image fetch helper ─────────────────────────────────────────────────────────
-async function fetchImageAsBase64(url: string): Promise<string | null> {
-  try {
-    const proxyUrl = `/api/image-proxy?url=${encodeURIComponent(url)}`;
-    const res = await fetch(proxyUrl);
-    if (!res.ok) return null;
-    const blob = await res.blob();
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(blob);
-    });
-  } catch {
-    return null;
-  }
-}
-
-// ── PDF builder using installed jsPDF + jspdf-autotable ───────────────────────
-async function buildQuotationPDF(params: {
-  quotationNo: string;
-  companyName: string;
-  contactName: string;
-  address: string;
-  remarks: string;
-  date: string;
-  lineItems: LineItem[];
-  logoBase64: string | null;
-}): Promise<void> {
-  const { jsPDF } = await import("jspdf");
-  const autoTable = (await import("jspdf-autotable")).default;
-
-  const {
-    quotationNo, companyName, contactName,
-    address, remarks, date, lineItems, logoBase64,
-  } = params;
-
-  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-  const pageW = 210;
-  const margin = 14;
-  let curY = 10;
-
-  // ── Quotation No (top right) ────────────────────────────────────────────────
-  doc.setFont("helvetica", "italic");
-  doc.setFontSize(9);
-  doc.setTextColor(197, 160, 89);
-  doc.text(`Quotation No. ${quotationNo}`, pageW - margin, curY, { align: "right" });
-  curY += 8;
-
-  // ── Title ───────────────────────────────────────────────────────────────────
-  doc.setFont("times", "bold");
-  doc.setFontSize(16);
-  doc.setTextColor(0, 0, 0);
-  doc.text("QUOTATION", pageW / 2, curY, { align: "center" });
-  curY += 8;
-
-  // ── Info block: Customer table LEFT + Logo RIGHT ────────────────────────────
-  const infoX = margin;
-  const infoW = 100;
-  const logoX = margin + infoW + 4;
-  const logoW = pageW - margin - logoX;
-
-  const infoRows = [
-    [`Customer Name: ${companyName}`],
-    [`Contact Name: ${contactName}`],
-    [`Customer Address: ${address}`],
-    [`Quotation: ${quotationNo}`],
-    [`Date: ${date}`],
-    [`Remarks: ${remarks}`],
-  ];
-
-  // Draw info box
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
-  doc.setDrawColor(80, 80, 80);
-  doc.setLineWidth(0.3);
-  const rowH = 6;
-  infoRows.forEach((row, i) => {
-    const y = curY + i * rowH;
-    doc.rect(infoX, y, infoW, rowH);
-    doc.setFont("helvetica", i < 5 ? "normal" : "bold");
-    doc.text(row[0], infoX + 2, y + 4);
-  });
-
-  // Draw logo if available
-  if (logoBase64) {
-    try {
-      const logoH = rowH * infoRows.length;
-      doc.addImage(logoBase64, "PNG", logoX, curY, logoW, logoH);
-    } catch { /* skip */ }
-  } else {
-    doc.setFont("times", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(197, 160, 89);
-    doc.text("Brahammand\nJewellery", logoX + logoW / 2, curY + 12, { align: "center" });
-    doc.setTextColor(0, 0, 0);
-  }
-
-  curY += infoRows.length * rowH + 8;
-
-  // ── Summary Table (grouped by item type) ────────────────────────────────────
-  const groups = new Map<string, { qty: number; gross: number; net: number }>();
-  for (const li of lineItems) {
-    const type = li.product.itemType || "Jewellery";
-    const prev = groups.get(type) ?? { qty: 0, gross: 0, net: 0 };
-    groups.set(type, {
-      qty: prev.qty + 1,
-      gross: prev.gross + (li.product.grossWeight ?? 0),
-      net: prev.net + (li.product.netWeight ?? 0),
-    });
-  }
-
-  const totalGross = lineItems.reduce((s, li) => s + (li.product.grossWeight ?? 0), 0);
-  const totalNet = lineItems.reduce((s, li) => s + (li.product.netWeight ?? 0), 0);
-  const totalQty = lineItems.length;
-
-  const summaryBody: string[][] = Array.from(groups.entries()).map(([type, v], i) => [
-    String(i + 1),
-    type,
-    String(v.qty),
-    v.gross.toFixed(3),
-    v.net.toFixed(3),
-  ]);
-
-  autoTable(doc, {
-    startY: curY,
-    head: [["Sr.", "Item Type", "Qty", "Gross Wt", "Net Wt"]],
-    body: summaryBody,
-    foot: [[
-      "", "Total",
-      String(totalQty),
-      `Approx. ${totalGross.toFixed(3)} gms`,
-      `Approx. ${totalNet.toFixed(3)} gms`,
-    ]],
-    margin: { left: margin, right: margin },
-    styles: { fontSize: 8, cellPadding: 2, halign: "center", lineColor: [0, 0, 0], lineWidth: 0.25 },
-    headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: "bold" },
-    footStyles: { fillColor: [220, 220, 220], textColor: [0, 0, 0], fontStyle: "bold" },
-    columnStyles: { 1: { halign: "center" } },
-    tableLineColor: [0, 0, 0],
-    tableLineWidth: 0.3,
-  });
-
-  curY = (doc as any).lastAutoTable.finalY + 10;
-
-  // ── Fetch product images in parallel ─────────────────────────────────────────
-  const imageDataUrls = await Promise.all(
-    lineItems.map(li => li.product.imageUrl ? fetchImageAsBase64(li.product.imageUrl) : Promise.resolve(null))
-  );
-
-  // ── Detail Table (one row per product with image) ─────────────────────────────
-  const imgCellH = 28; // mm
-
-  // Draw table header manually
-  const colDefs = [
-    { label: "Sr", w: 8 },
-    { label: "Image", w: 32 },
-    { label: "Design No.", w: 28 },
-    { label: "KT", w: 10 },
-    { label: "Color", w: 12 },
-    { label: "Gross Wt.", w: 18 },
-    { label: "Net Wt.", w: 17 },
-    { label: "S Wt.", w: 13 },
-    { label: "Qty", w: 12 },
-    { label: "Remarks", w: 26 },
-  ];
-
-  const tableW = colDefs.reduce((s, c) => s + c.w, 0);
-
-  function checkNewPage(neededH: number) {
-    if (curY + neededH > 275) {
-      doc.addPage();
-      curY = 14;
-      drawDetailHeader();
-    }
-  }
-
-  function drawDetailHeader() {
-    doc.setFillColor(230, 230, 230);
-    doc.rect(margin, curY, tableW, 6, "F");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7.5);
-    doc.setTextColor(0, 0, 0);
-    doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(0.25);
-    let cx = margin;
-    colDefs.forEach(col => {
-      doc.rect(cx, curY, col.w, 6);
-      doc.text(col.label, cx + col.w / 2, curY + 4, { align: "center" });
-      cx += col.w;
-    });
-    curY += 6;
-  }
-
-  // Check if detail table fits
-  checkNewPage(imgCellH + 6);
-  drawDetailHeader();
-
-  for (let i = 0; i < lineItems.length; i++) {
-    const li = lineItems[i];
-    const p = li.product;
-    const imgData = imageDataUrls[i];
-
-    checkNewPage(imgCellH + 4);
-
-    let cx = margin;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.5);
-    doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(0.2);
-
-    // Draw row cells
-    colDefs.forEach((col, ci) => {
-      doc.rect(cx, curY, col.w, imgCellH);
-      cx += col.w;
-    });
-
-    // Fill cell text
-    cx = margin;
-    const rowMidY = curY + imgCellH / 2 + 2.5;
-
-    // Sr
-    doc.text(String(i + 1), cx + colDefs[0].w / 2, rowMidY, { align: "center" });
-    cx += colDefs[0].w;
-
-    // Image cell
-    if (imgData) {
-      try {
-        const format = imgData.startsWith("data:image/png") ? "PNG" : "JPEG";
-        doc.addImage(imgData, format, cx + 1, curY + 1, colDefs[1].w - 2, imgCellH - 2);
-      } catch { /* skip */ }
-    } else {
-      doc.setTextColor(120, 120, 120);
-      doc.text("No\nImage", cx + colDefs[1].w / 2, curY + imgCellH / 2, { align: "center" });
-      doc.setTextColor(0, 0, 0);
-    }
-    // Design No label below image
-    doc.setFont("helvetica", "italic");
-    doc.setFontSize(6);
-    doc.text(p.designNumber, cx + colDefs[1].w / 2, curY + imgCellH - 1, { align: "center" });
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.5);
-    cx += colDefs[1].w;
-
-    // Design No.
-    doc.text(p.designNumber, cx + colDefs[2].w / 2, rowMidY, { align: "center" });
-    cx += colDefs[2].w;
-
-    // KT
-    const kt = p.metalPurity?.replace(/[^0-9]/g, "") || "18";
-    doc.text(kt, cx + colDefs[3].w / 2, rowMidY, { align: "center" });
-    cx += colDefs[3].w;
-
-    // Color (metalType Y/W/R)
-    const color = p.metalType?.charAt(0).toUpperCase() || "Y";
-    doc.text(color, cx + colDefs[4].w / 2, rowMidY, { align: "center" });
-    cx += colDefs[4].w;
-
-    // Gross Wt
-    doc.text((p.grossWeight ?? 0).toFixed(3), cx + colDefs[5].w / 2, rowMidY, { align: "center" });
-    cx += colDefs[5].w;
-
-    // Net Wt
-    doc.text((p.netWeight ?? 0).toFixed(3), cx + colDefs[6].w / 2, rowMidY, { align: "center" });
-    cx += colDefs[6].w;
-
-    // S Wt
-    doc.text((p.stoneWeight ?? 0).toFixed(3), cx + colDefs[7].w / 2, rowMidY, { align: "center" });
-    cx += colDefs[7].w;
-
-    // Qty
-    doc.text("1", cx + colDefs[8].w / 2, rowMidY, { align: "center" });
-    cx += colDefs[8].w;
-
-    // Remarks
-    // (empty by default)
-    cx += colDefs[9].w;
-
-    curY += imgCellH;
-  }
-
-  // Save
-  doc.save(`Quotation_${quotationNo}.pdf`);
-}
+// Local helper removed, using buildQuotationPDF from lib
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 export default function QuotationExportModal({ lineItems, onClose, onExported }: Props) {
@@ -463,19 +181,31 @@ export default function QuotationExportModal({ lineItems, onClose, onExported }:
       } catch { /* no logo */ }
 
       // 3. Generate PDF
-      const today = new Date().toLocaleDateString("en-IN", {
-        day: "2-digit", month: "2-digit", year: "numeric",
-      }).replace(/\//g, "-");
+      const mappedLineItems: PdfQuotationLineItem[] = lineItems.map((li) => ({
+        sku: li.product.sku,
+        designNumber: li.product.designNumber,
+        itemType: li.product.itemType,
+        grossWeight: li.product.grossWeight,
+        netWeight: li.product.netWeight,
+        stoneWeight: li.product.stoneWeight,
+        metalPurity: li.product.metalPurity,
+        metalType: li.product.metalType,
+        imageUrl: li.product.imageUrl,
+        qty: 1, // Default from earlier scanner logic
+        remarks: "",
+      }));
 
+      // Generate PDF
       await buildQuotationPDF({
-        quotationNo,
+        quotationNo: quotationNo,
         companyName: form.companyName,
         contactName: form.contactName,
         address: form.address,
         remarks: form.remarks,
-        date: today,
-        lineItems,
+        date: new Date().toLocaleDateString("en-IN"),
+        lineItems: mappedLineItems,
         logoBase64,
+        withImages: true,
       });
 
       onExported(quotationNo);

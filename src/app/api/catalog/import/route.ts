@@ -69,19 +69,19 @@ function validateHeaders(rows: Record<string, unknown>[]): string[] {
 
 function parseRow(row: Record<string, unknown>, rowNumber: number): ParsedRow {
   return {
-    rfid:           String(row["RFID Tag"]         || "").trim(),
-    sku:            String(row["SKU Number"]        || "").trim(),
-    designNumber:   String(row["Design Number"]     || "").trim(),
-    imageName:      String(row["Image Name"]        || "").trim(),
-    itemType:       String(row["Item Type"]         || "").trim(),
-    grossWeight:    Number(row["Gross Weight"])      || 0,
-    netWeight:      Number(row["Net Weight"])        || 0,
-    metalPurity:    String(row["Metal Purity"]       || "").trim(),
-    metalType:      String(row["Metal Type"]         || "").trim(),
-    collectionLine: String(row["Collection Line"]    || "").trim(),
-    stoneWeight:    Number(row["Stone Weight"])       || 0,
-    size:           Number(row["Size"])               || 0,
-    itemCategory:   String(row["Item Category"]      || "").trim(),
+    rfid: String(row["RFID Tag"] || "").trim(),
+    sku: String(row["SKU Number"] || "").trim(),
+    designNumber: String(row["Design Number"] || "").trim(),
+    imageName: String(row["Image Name"] || "").trim(),
+    itemType: String(row["Item Type"] || "").trim(),
+    grossWeight: Number(row["Gross Weight"]) || 0,
+    netWeight: Number(row["Net Weight"]) || 0,
+    metalPurity: String(row["Metal Purity"] || "").trim(),
+    metalType: String(row["Metal Type"] || "").trim(),
+    collectionLine: String(row["Collection Line"] || "").trim(),
+    stoneWeight: Number(row["Stone Weight"]) || 0,
+    size: Number(row["Size"]) || 0,
+    itemCategory: String(row["Item Category"] || "").trim(),
     rowNumber,
   };
 }
@@ -100,9 +100,9 @@ export const POST = withAuth(async (req: NextRequest, ctx: AuthenticatedRequest)
     await connectToDatabase();
 
     const formData = await req.formData();
-    const file     = formData.get("file") as File | null;
-    const type     = (formData.get("type") as string | null) ?? "instock";
-    const replace  = formData.get("replace") === "true";
+    const file = formData.get("file") as File | null;
+    const type = (formData.get("type") as string | null) ?? "instock";
+    const replace = formData.get("replace") === "true";
 
     if (!file) {
       return NextResponse.json({ error: "No file provided." }, { status: 400 });
@@ -116,10 +116,10 @@ export const POST = withAuth(async (req: NextRequest, ctx: AuthenticatedRequest)
     }
 
     // ── Parse Excel ────────────────────────────────────────────────────────────
-    const buffer   = Buffer.from(await file.arrayBuffer());
+    const buffer = Buffer.from(await file.arrayBuffer());
     const workbook = XLSX.read(buffer, { type: "buffer" });
-    const sheet    = workbook.Sheets[workbook.SheetNames[0]];
-    const rawRows  = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
 
     // ── Header validation ──────────────────────────────────────────────────────
     const missingColumns = validateHeaders(rawRows);
@@ -127,24 +127,24 @@ export const POST = withAuth(async (req: NextRequest, ctx: AuthenticatedRequest)
       return NextResponse.json(
         {
           error: `Missing mandatory column(s): ${missingColumns.join(", ")}. ` +
-                 `Download the sample Excel to see the correct format.`,
+            `Download the sample Excel to see the correct format.`,
         },
         { status: 422 }
       );
     }
 
     // ── Row parsing + field validation ─────────────────────────────────────────
-    const validRows:   ParsedRow[] = [];
-    const errors:      RowError[]  = [];
+    const validRows: ParsedRow[] = [];
+    const errors: RowError[] = [];
 
     rawRows.forEach((raw, i) => {
-      const row     = parseRow(raw, i + 2); // +2: header row + 0-index
+      const row = parseRow(raw, i + 2); // +2: header row + 0-index
       const missing = getMissingFields(row);
       if (missing.length > 0) {
         errors.push({
           rowNumber: row.rowNumber,
-          sku:       row.sku || "(blank)",
-          reason:    `Missing: ${missing.join(", ")}`,
+          sku: row.sku || "(blank)",
+          reason: `Missing: ${missing.join(", ")}`,
         });
       } else {
         validRows.push(row);
@@ -159,7 +159,7 @@ export const POST = withAuth(async (req: NextRequest, ctx: AuthenticatedRequest)
       skuGroups.set(row.sku, group);
     }
 
-    const cleanRows:   ParsedRow[] = [];
+    const cleanRows: ParsedRow[] = [];
     for (const [sku, group] of skuGroups) {
       if (group.length > 1) {
         group.forEach((r) =>
@@ -177,20 +177,20 @@ export const POST = withAuth(async (req: NextRequest, ctx: AuthenticatedRequest)
     if (cleanRows.length === 0) {
       return NextResponse.json({
         inserted: 0,
-        updated:  0,
-        skipped:  0,
+        updated: 0,
+        skipped: 0,
         errors,
-        message:  "No valid rows to import.",
+        message: "No valid rows to import.",
       });
     }
 
     const itemStatus = (type === "catalogue" ? "CATALOGUE" : "INSTOCK") as "CATALOGUE" | "INSTOCK";
-    const isCatalog  = type === "catalogue";
-    const isInstock  = type === "instock";
+    const isCatalog = type === "catalogue";
+    const isInstock = type === "instock";
 
     let inserted = 0;
-    let updated  = 0;
-    let skipped  = 0;
+    let updated = 0;
+    let skipped = 0;
 
     if (replace) {
       // ── Replace mode: upsert everything ──────────────────────────────────────
@@ -199,15 +199,15 @@ export const POST = withAuth(async (req: NextRequest, ctx: AuthenticatedRequest)
           filter: { sku: row.sku },
           update: {
             $set: {
-              sku:            row.sku,
-              designNumber:   row.designNumber,
-              rfid:           row.rfid,
-              grossWeight:    row.grossWeight,
-              netWeight:      row.netWeight,
-              stoneWeight:    row.stoneWeight,
-              metalPurity:    row.metalPurity,
-              metalType:      row.metalType,
-              itemType:       row.itemType,
+              sku: row.sku,
+              designNumber: row.designNumber,
+              rfid: row.rfid,
+              grossWeight: row.grossWeight,
+              netWeight: row.netWeight,
+              stoneWeight: row.stoneWeight,
+              metalPurity: row.metalPurity,
+              metalType: row.metalType,
+              itemType: row.itemType,
               collectionLine: row.collectionLine,
               ...(row.imageName && { imageName: row.imageName }),
               itemStatus,
@@ -221,15 +221,15 @@ export const POST = withAuth(async (req: NextRequest, ctx: AuthenticatedRequest)
 
       try {
         const result = await Catalog.bulkWrite(operations, { ordered: false });
-        inserted = result.upsertedCount  ?? 0;
-        updated  = result.modifiedCount  ?? 0;
+        inserted = result.upsertedCount ?? 0;
+        updated = result.modifiedCount ?? 0;
       } catch (err) {
         const bulkErr = err as {
           result?: { upsertedCount?: number; modifiedCount?: number };
           writeErrors?: { index: number; errmsg: string }[];
         };
-        inserted = bulkErr.result?.upsertedCount  ?? 0;
-        updated  = bulkErr.result?.modifiedCount  ?? 0;
+        inserted = bulkErr.result?.upsertedCount ?? 0;
+        updated = bulkErr.result?.modifiedCount ?? 0;
         bulkErr.writeErrors?.forEach((we) => {
           const row = cleanRows[we.index];
           errors.push({ rowNumber: row?.rowNumber, sku: row?.sku, reason: we.errmsg });
@@ -244,24 +244,24 @@ export const POST = withAuth(async (req: NextRequest, ctx: AuthenticatedRequest)
       ).lean();
 
       const existingSkus = new Set(existingDocs.map((d) => d.sku));
-      const newRows      = cleanRows.filter((r) => !existingSkus.has(r.sku));
-      skipped            = cleanRows.length - newRows.length;
+      const newRows = cleanRows.filter((r) => !existingSkus.has(r.sku));
+      skipped = cleanRows.length - newRows.length;
 
       if (newRows.length > 0) {
         const operations = newRows.map((row) => ({
           insertOne: {
             document: {
-              sku:            row.sku,
-              designNumber:   row.designNumber,
-              rfid:           row.rfid,
-              grossWeight:    row.grossWeight,
-              netWeight:      row.netWeight,
-              stoneWeight:    row.stoneWeight,
-              metalPurity:    row.metalPurity,
-              metalType:      row.metalType,
-              itemType:       row.itemType,
+              sku: row.sku,
+              designNumber: row.designNumber,
+              rfid: row.rfid,
+              grossWeight: row.grossWeight,
+              netWeight: row.netWeight,
+              stoneWeight: row.stoneWeight,
+              metalPurity: row.metalPurity,
+              metalType: row.metalType,
+              itemType: row.itemType,
               collectionLine: row.collectionLine,
-              imageName:      row.imageName || row.designNumber,
+              imageName: row.imageName || row.designNumber,
               itemStatus,
               isCatalog,
               isInstock,

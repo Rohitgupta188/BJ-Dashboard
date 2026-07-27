@@ -17,11 +17,6 @@ function getLocalIP() {
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: [getLocalIP()],
-  experimental: {
-    serverActions: {
-      bodySizeLimit: '50mb',
-    },
-  },
   async headers() {
     return [
       {

@@ -1,0 +1,355 @@
+export interface PdfQuotationLineItem {
+  sku: string;
+  designNumber: string;
+  itemType?: string;
+  grossWeight?: number;
+  netWeight?: number;
+  stoneWeight?: number;
+  metalPurity?: string;
+  metalType?: string;
+  imageUrl?: string;
+  qty?: number;
+  remarks?: string;
+}
+
+export interface BuildQuotationPDFParams {
+  quotationNo: string;
+  companyName: string;
+  contactName: string;
+  address: string;
+  remarks: string;
+  date: string;
+  lineItems: PdfQuotationLineItem[];
+  logoBase64: string | null;
+  withImages?: boolean; // New parameter to toggle images
+}
+
+async function fetchImageAsBase64(url: string): Promise<string | null> {
+  try {
+    const proxyUrl = `/api/image-proxy?url=${encodeURIComponent(url)}`;
+    const res = await fetch(proxyUrl);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
+export async function buildQuotationPDF(params: BuildQuotationPDFParams): Promise<void> {
+  const { jsPDF } = await import("jspdf");
+  const autoTable = (await import("jspdf-autotable")).default;
+
+  const {
+    quotationNo, companyName, contactName,
+    address, remarks, date, lineItems, logoBase64,
+    withImages = true,
+  } = params;
+
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const pageW = 210;
+  const margin = 14;
+  let curY = 10;
+
+  // ── Quotation No (top right) ────────────────────────────────────────────────
+  doc.setFont("helvetica", "italic");
+  doc.setFontSize(9);
+  doc.setTextColor(197, 160, 89);
+  doc.text(`Quotation No. ${quotationNo}`, pageW - margin, curY, { align: "right" });
+  curY += 8;
+
+  // ── Title ───────────────────────────────────────────────────────────────────
+  doc.setFont("times", "bold");
+  doc.setFontSize(16);
+  doc.setTextColor(0, 0, 0);
+  doc.text("QUOTATION", pageW / 2, curY, { align: "center" });
+  curY += 8;
+
+  // ── Info block: Customer table LEFT + Logo RIGHT ────────────────────────────
+  const tableW = pageW - 2 * margin;
+  const infoW = tableW * 0.7; // 70% for info, 30% for logo
+  const logoX = margin + infoW;
+  const logoW = tableW - infoW;
+
+  const infoRows = [
+    [`Customer Name: ${companyName}`],
+    [`Contact Name: ${contactName}`],
+    [`Customer Address: ${address}`],
+    [`Quotation: ${quotationNo}`],
+    [`Date: ${date}`],
+  ];
+
+  const remarksText = `Remarks: ${remarks || "N/A"}`;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.5);
+  const remarksLines = doc.splitTextToSize(remarksText, infoW - 4);
+  const rowH = 6;
+  const remarksH = Math.max(rowH, remarksLines.length * 4 + 4);
+  const totalH = (infoRows.length * rowH) + remarksH;
+
+  // Draw outer box
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.3);
+  doc.rect(margin, curY, tableW, totalH);
+  
+  // Draw vertical line separating info and logo
+  doc.line(logoX, curY, logoX, curY + totalH);
+
+  // Draw info rows
+  infoRows.forEach((row, i) => {
+    const y = curY + i * rowH;
+    if (i > 0) doc.line(margin, y, logoX, y);
+    doc.setFont("helvetica", "bold");
+    doc.text(row[0], margin + 2, y + 4);
+  });
+
+  // Draw remarks row line
+  const remarksY = curY + infoRows.length * rowH;
+  doc.line(margin, remarksY, logoX, remarksY);
+  
+  // Draw remarks text
+  doc.setFont("helvetica", "bold");
+  doc.text(remarksLines, margin + 2, remarksY + 4);
+
+  // Draw logo
+  if (logoBase64) {
+    try {
+      const lW = logoW - 4;
+      const lH = lW * 0.6; // Approximation for aspect ratio
+      const lY = curY + (totalH - lH) / 2;
+      doc.addImage(logoBase64, "PNG", logoX + 2, lY, lW, lH);
+    } catch { /* skip */ }
+  } else {
+    doc.setFont("times", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(197, 160, 89);
+    doc.text("Brahammand\nJewellery", logoX + logoW / 2, curY + totalH / 2, { align: "center", baseline: "middle" });
+    doc.setTextColor(0, 0, 0);
+  }
+
+  curY += totalH + 8;
+
+  // ── Summary Table (grouped by item type) ────────────────────────────────────
+  const groups = new Map<string, { qty: number; gross: number; net: number }>();
+  for (const li of lineItems) {
+    const type = li.itemType || "Jewellery";
+    const qty = li.qty ?? 1;
+    const prev = groups.get(type) ?? { qty: 0, gross: 0, net: 0 };
+    groups.set(type, {
+      qty: prev.qty + qty,
+      gross: prev.gross + (li.grossWeight ?? 0) * qty,
+      net: prev.net + (li.netWeight ?? 0) * qty,
+    });
+  }
+
+  const totalGross = lineItems.reduce((s, li) => s + (li.grossWeight ?? 0) * (li.qty ?? 1), 0);
+  const totalNet = lineItems.reduce((s, li) => s + (li.netWeight ?? 0) * (li.qty ?? 1), 0);
+  const totalQty = lineItems.reduce((s, li) => s + (li.qty ?? 1), 0);
+
+  const summaryBody: string[][] = Array.from(groups.entries()).map(([type, v], i) => [
+    String(i + 1),
+    type,
+    String(v.qty),
+    v.gross.toFixed(3),
+    v.net.toFixed(3),
+  ]);
+
+  autoTable(doc, {
+    startY: curY,
+    head: [["Sr.", "Item Type", "Qty", "Gross Wt", "Net Wt"]],
+    body: summaryBody,
+    foot: [[
+      "", "Total",
+      String(totalQty),
+      `Approx. ${totalGross.toFixed(3)} gms`,
+      `Approx. ${totalNet.toFixed(3)} gms`,
+    ]],
+    margin: { left: margin, right: margin },
+    styles: { fontSize: 8, cellPadding: 2, halign: "center", lineColor: [0, 0, 0], lineWidth: 0.25 },
+    headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: "bold" },
+    footStyles: { fillColor: [220, 220, 220], textColor: [0, 0, 0], fontStyle: "bold" },
+    columnStyles: { 1: { halign: "center" } },
+    tableLineColor: [0, 0, 0],
+    tableLineWidth: 0.3,
+  });
+
+  curY = (doc as any).lastAutoTable.finalY + 10;
+
+  // ── Detail Table ─────────────────────────────
+  
+  if (!withImages) {
+    // Render detail table without images using autoTable
+    const detailBody = lineItems.map((li, i) => {
+      const kt = li.metalPurity?.replace(/[^0-9]/g, "") || "18";
+      const color = li.metalType?.charAt(0).toUpperCase() || "Y";
+      return [
+        String(i + 1),
+        li.designNumber,
+        kt,
+        color,
+        (li.grossWeight ?? 0).toFixed(3),
+        (li.netWeight ?? 0).toFixed(3),
+        (li.stoneWeight ?? 0).toFixed(3),
+        String(li.qty ?? 1),
+        li.remarks || "",
+      ];
+    });
+
+    autoTable(doc, {
+      startY: curY,
+      head: [["Sr", "Design No.", "KT", "Color", "Gross Wt", "Net Wt", "S Wt", "Qty", "Remarks"]],
+      body: detailBody,
+      margin: { left: margin, right: margin },
+      styles: { fontSize: 7.5, cellPadding: 2, halign: "center", lineColor: [0, 0, 0], lineWidth: 0.2 },
+      headStyles: { fillColor: [230, 230, 230], textColor: [0, 0, 0], fontStyle: "bold" },
+      tableLineColor: [0, 0, 0],
+      tableLineWidth: 0.25,
+    });
+  } else {
+    // Render detail table with images manually
+    const imageDataUrls = await Promise.all(
+      lineItems.map(li => li.imageUrl ? fetchImageAsBase64(li.imageUrl) : Promise.resolve(null))
+    );
+
+    const imgCellH = 28; // mm
+
+    const colDefs = [
+      { label: "Sr", w: 8 },
+      { label: "Image", w: 32 },
+      { label: "Design No.", w: 26 },
+      { label: "KT", w: 10 },
+      { label: "Color", w: 10 },
+      { label: "Gross Wt.", w: 18 },
+      { label: "Net Wt.", w: 18 },
+      { label: "S Wt.", w: 13 },
+      { label: "Qty", w: 12 },
+      { label: "Remarks", w: 35 },
+    ];
+
+    const tableW = colDefs.reduce((s, c) => s + c.w, 0);
+
+    function checkNewPage(neededH: number) {
+      if (curY + neededH > 275) {
+        doc.addPage();
+        curY = 14;
+        drawDetailHeader();
+      }
+    }
+
+    function drawDetailHeader() {
+      doc.setFillColor(230, 230, 230);
+      doc.rect(margin, curY, tableW, 6, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.5);
+      doc.setTextColor(0, 0, 0);
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.25);
+      let cx = margin;
+      colDefs.forEach(col => {
+        doc.rect(cx, curY, col.w, 6);
+        doc.text(col.label, cx + col.w / 2, curY + 4, { align: "center" });
+        cx += col.w;
+      });
+      curY += 6;
+    }
+
+    checkNewPage(imgCellH + 6);
+    drawDetailHeader();
+
+    for (let i = 0; i < lineItems.length; i++) {
+      const li = lineItems[i];
+      const imgData = imageDataUrls[i];
+
+      checkNewPage(imgCellH + 4);
+
+      let cx = margin;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.5);
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.2);
+
+      // Draw row cells
+      colDefs.forEach((col) => {
+        doc.rect(cx, curY, col.w, imgCellH);
+        cx += col.w;
+      });
+
+      // Fill cell text
+      cx = margin;
+      const rowMidY = curY + imgCellH / 2 + 2.5;
+
+      // Sr
+      doc.text(String(i + 1), cx + colDefs[0].w / 2, rowMidY, { align: "center" });
+      cx += colDefs[0].w;
+
+      // Image cell
+      if (imgData) {
+        try {
+          const format = imgData.startsWith("data:image/png") ? "PNG" : "JPEG";
+          doc.addImage(imgData, format, cx + 1, curY + 1, colDefs[1].w - 2, imgCellH - 2);
+        } catch { /* skip */ }
+      } else {
+        doc.setTextColor(120, 120, 120);
+        doc.text("No\nImage", cx + colDefs[1].w / 2, curY + imgCellH / 2, { align: "center" });
+        doc.setTextColor(0, 0, 0);
+      }
+      
+      // Design No label below image
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(6);
+      doc.text(li.designNumber, cx + colDefs[1].w / 2, curY + imgCellH - 1, { align: "center" });
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.5);
+      cx += colDefs[1].w;
+
+      // Design No.
+      doc.text(li.designNumber, cx + colDefs[2].w / 2, rowMidY, { align: "center" });
+      cx += colDefs[2].w;
+
+      // KT
+      const kt = li.metalPurity?.replace(/[^0-9]/g, "") || "18";
+      doc.text(kt, cx + colDefs[3].w / 2, rowMidY, { align: "center" });
+      cx += colDefs[3].w;
+
+      // Color (metalType Y/W/R)
+      const color = li.metalType?.charAt(0).toUpperCase() || "Y";
+      doc.text(color, cx + colDefs[4].w / 2, rowMidY, { align: "center" });
+      cx += colDefs[4].w;
+
+      // Gross Wt
+      doc.text((li.grossWeight ?? 0).toFixed(3), cx + colDefs[5].w / 2, rowMidY, { align: "center" });
+      cx += colDefs[5].w;
+
+      // Net Wt
+      doc.text((li.netWeight ?? 0).toFixed(3), cx + colDefs[6].w / 2, rowMidY, { align: "center" });
+      cx += colDefs[6].w;
+
+      // S Wt
+      doc.text((li.stoneWeight ?? 0).toFixed(3), cx + colDefs[7].w / 2, rowMidY, { align: "center" });
+      cx += colDefs[7].w;
+
+      // Qty
+      doc.text(String(li.qty ?? 1), cx + colDefs[8].w / 2, rowMidY, { align: "center" });
+      cx += colDefs[8].w;
+
+      // Remarks
+      if (li.remarks) {
+        // Multi-line remarks handling
+        const lines = doc.splitTextToSize(li.remarks, colDefs[9].w - 2);
+        const yOffset = curY + (imgCellH / 2) - ((lines.length - 1) * 2);
+        doc.text(lines, cx + colDefs[9].w / 2, yOffset, { align: "center" });
+      }
+      cx += colDefs[9].w;
+
+      curY += imgCellH;
+    }
+  }
+
+  // Save
+  doc.save(`Quotation_${quotationNo}.pdf`);
+}

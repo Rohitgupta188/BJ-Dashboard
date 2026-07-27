@@ -330,7 +330,7 @@ export default function ProductsTableView({ userRole }: { userRole?: string }) {
             <TableHeader className="bg-muted/20 border-b border-border">
               <TableRow className="hover:bg-transparent border-border">
                 {userRole === "admin" && (
-                  <TableHead className="w-12 p-4">
+                  <TableHead className="w-12 p-2 pr-6">
                     <Checkbox
                       checked={allSelected}
                       onCheckedChange={toggleAll}
@@ -338,15 +338,15 @@ export default function ProductsTableView({ userRole }: { userRole?: string }) {
                     />
                   </TableHead>
                 )}
-                <TableHead className="font-semibold uppercase tracking-wider text-foreground text-xs py-3 min-w-24">IMAGE</TableHead>
-                <TableHead className="font-semibold uppercase tracking-wider text-primary text-xs py-3 min-w-32">RFID TAG</TableHead>
-                <TableHead className="font-semibold uppercase tracking-wider text-primary text-xs py-3 min-w-32">DESIGN NO.</TableHead>
-                <TableHead className="font-semibold uppercase tracking-wider text-foreground text-xs py-3 text-center min-w-20">GR WT</TableHead>
-                <TableHead className="font-semibold uppercase tracking-wider text-foreground text-xs py-3 text-center min-w-20">NET WT</TableHead>
-                <TableHead className="font-semibold uppercase tracking-wider text-foreground text-xs py-3 text-center min-w-28">METAL TYPE</TableHead>
-                <TableHead className="font-semibold uppercase tracking-wider text-foreground text-xs py-3 text-center min-w-28">ITEM TYPE</TableHead>
+                <TableHead className="font-semibold uppercase tracking-wider text-foreground text-sm py-2 px-2 text-center">IMAGE</TableHead>
+                <TableHead className="font-semibold uppercase tracking-wider text-primary text-sm py-2 px-2 text-center">RFID TAG</TableHead>
+                <TableHead className="font-semibold uppercase tracking-wider text-primary text-sm py-2 px-2 text-center">DESIGN NO.</TableHead>
+                <TableHead className="font-semibold uppercase tracking-wider text-foreground text-sm py-2 px-2 text-center">GR WT</TableHead>
+                <TableHead className="font-semibold uppercase tracking-wider text-foreground text-sm py-2 px-2 text-center">NET WT</TableHead>
+                <TableHead className="font-semibold uppercase tracking-wider text-foreground text-sm py-2 px-2 text-center">METAL TYPE</TableHead>
+                <TableHead className="font-semibold uppercase tracking-wider text-foreground text-sm py-2 px-2 text-center">ITEM TYPE</TableHead>
                 {userRole === "admin" && (
-                  <TableHead className="font-semibold uppercase tracking-wider text-foreground text-xs py-3 text-center min-w-20">ACTION</TableHead>
+                  <TableHead className="font-semibold uppercase tracking-wider text-foreground text-sm py-2 px-2 text-center">ACTION</TableHead>
                 )}
               </TableRow>
             </TableHeader>
@@ -355,7 +355,7 @@ export default function ProductsTableView({ userRole }: { userRole?: string }) {
               {isLoading && Array.from({ length: 8 }).map((_, i) => (
                 <TableRow key={i} className="border-border animate-pulse">
                   {userRole === "admin" && (
-                    <TableCell className="p-4"><div className="h-4 w-4 bg-muted rounded" /></TableCell>
+                    <TableCell className="p-2 pr-6"><div className="h-4 w-4 bg-muted rounded" /></TableCell>
                   )}
                   <TableCell><div className="h-14 w-14 bg-muted rounded-lg" /></TableCell>
                   <TableCell><div className="h-3 w-24 bg-muted rounded" /></TableCell>
@@ -380,7 +380,7 @@ export default function ProductsTableView({ userRole }: { userRole?: string }) {
                     className={`border-border transition-colors ${isSelected ? "bg-primary/5" : "hover:bg-muted/20"} ${isDeleting ? "opacity-40" : ""}`}
                   >
                     {userRole === "admin" && (
-                      <TableCell className="p-4">
+                      <TableCell className="p-2 pr-6">
                         <Checkbox
                           checked={isSelected}
                           onCheckedChange={() => toggleOne(product.sku)}
@@ -388,42 +388,42 @@ export default function ProductsTableView({ userRole }: { userRole?: string }) {
                         />
                       </TableCell>
                     )}
-                    <TableCell className="py-2">
-                      <div className="h-20 w-20 rounded-lg border border-border bg-muted/10 overflow-hidden flex items-center justify-center">
+                    <TableCell className="px-2 text-center">
+                      <div className="h-24 w-24 mx-auto rounded-lg border border-border bg-muted/10 overflow-hidden flex items-center justify-center">
                         {product.imageUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
                             src={product.imageUrl}
                             alt={product.designNumber}
-                            className="object-contain h-full w-full"
+                            className="object-cover h-full w-full transition-transform hover:scale-105 duration-500"
                             loading="lazy"
                             onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
                           />
                         ) : (
-                          <span className="text-2xl">💎</span>
+                          <span className="text-3xl">💎</span>
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <span className="font-mono text-sm font-semibold text-primary">{product.rfid || product.sku}</span>
+                    <TableCell className="px-2 text-center">
+                      <span className="font-mono text-base font-semibold text-primary">{product.rfid || product.sku}</span>
                     </TableCell>
-                    <TableCell>
-                      <span className="font-mono text-sm font-semibold text-primary">{product.designNumber}</span>
+                    <TableCell className="px-2 text-center">
+                      <span className="font-mono text-base font-semibold text-primary">{product.designNumber}</span>
                     </TableCell>
-                    <TableCell className="text-center font-mono text-sm text-foreground">
+                    <TableCell className="px-2 text-center font-mono text-base text-foreground">
                       {product.grossWeight?.toFixed(2) ?? "—"}
                     </TableCell>
-                    <TableCell className="text-center font-mono text-sm text-primary font-semibold">
+                    <TableCell className="px-2 text-center font-mono text-base text-primary font-semibold">
                       {product.netWeight?.toFixed(3) ?? "—"}
                     </TableCell>
-                    <TableCell className="text-center text-sm text-foreground font-medium">
+                    <TableCell className="px-2 text-center text-base text-foreground font-medium">
                       {product.metalType || "—"}
                     </TableCell>
-                    <TableCell className="text-center text-sm text-foreground font-medium">
+                    <TableCell className="px-2 text-center text-base text-foreground font-medium">
                       {product.itemType || product.sku?.substring(0, 4) || "—"}
                     </TableCell>
                     {userRole === "admin" && (
-                      <TableCell className="text-center">
+                      <TableCell className="px-2 text-center">
                         <div className="flex items-center justify-center gap-3">
                           <button
                             onClick={() => deleteSingle(product.sku)}

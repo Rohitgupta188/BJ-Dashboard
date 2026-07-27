@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/renew-webhook",
+      "schedule": "0 0 */2 * *"
+    }
+  ],
+  "functions": {
+    "src/app/api/drive/webhook/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/cron/renew-webhook/route.ts": {
+      "maxDuration": 30
+    }
+  }
+}

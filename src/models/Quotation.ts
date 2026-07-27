@@ -32,6 +32,8 @@ export interface IQuotation extends Document {
   totalNetWeight: number;
   totalItems: number;
 
+  isDispatched: boolean;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -71,6 +73,8 @@ const QuotationSchema = new Schema<IQuotation>(
     totalGrossWeight: { type: Number, default: 0 },
     totalNetWeight: { type: Number, default: 0 },
     totalItems: { type: Number, default: 0 },
+
+    isDispatched: { type: Boolean, default: false },
   },
   {
     timestamps: true,

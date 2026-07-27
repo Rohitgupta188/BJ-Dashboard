@@ -6,7 +6,19 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import QRButton from "../qrbutton";
+import QRCode from "qrcode";
+
+function StaticQR({ sku }: { sku: string }) {
+  const [src, setSrc] = useState("");
+  useEffect(() => {
+    QRCode.toDataURL(sku, { margin: 1, width: 60, color: { dark: "#000000", light: "#ffffff" } })
+      .then(setSrc)
+      .catch(console.error);
+  }, [sku]);
+  
+  if (!src) return <div className="w-[50px] h-[50px] bg-muted/20 rounded-md animate-pulse" />;
+  return <img src={src} alt={`QR for ${sku}`} className="w-[50px] h-[50px] rounded-md shadow-sm border border-border" />;
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 // Matches the shape returned by app/api/catalog/route.ts, which mirrors ICatalog
@@ -88,7 +100,7 @@ export default function CatalogueView({ cart = [], onToggleCart }: CatalogueView
     try {
       const params = new URLSearchParams({
         page: String(currentPage),
-        limit: "25",
+        limit: "20",
       });
       if (debouncedSearch) params.set("search", debouncedSearch);
       if (itemStatus !== "ALL") params.set("itemStatus", itemStatus);
@@ -181,7 +193,7 @@ export default function CatalogueView({ cart = [], onToggleCart }: CatalogueView
       )}
 
       {/* ── PRODUCT GRID ────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 min-[380px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6 text-foreground mt-2 px-3 sm:px-6 lg:px-8">
+      <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-6 text-foreground mt-2 px-2 sm:px-6 lg:px-8">
         {/* Loading skeletons */}
         {isLoading && Array.from({ length: 15 }).map((_, i) => <SkeletonCard key={i} />)}
 
@@ -196,7 +208,7 @@ export default function CatalogueView({ cart = [], onToggleCart }: CatalogueView
               className="group relative overflow-hidden border-border/60 bg-card/70 backdrop-blur-sm flex flex-col rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.2)] transition-all duration-500 hover:-translate-y-1 hover:border-primary/50 hover:shadow-[0_20px_40px_-12px_rgba(197,160,89,0.25)]"
             >
               {/* ── Image area */}
-              <div className="relative aspect-square bg-muted/15 flex items-center justify-center p-3 overflow-hidden">
+              <div className="relative aspect-square bg-muted/15 flex items-center justify-center p-0 overflow-hidden">
                 {/* Floating Cart Button */}
                 <button
                   type="button"
@@ -204,7 +216,7 @@ export default function CatalogueView({ cart = [], onToggleCart }: CatalogueView
                     e.stopPropagation();
                     onToggleCart(product);
                   }}
-                  className={`absolute bottom-3 right-3 z-10 p-2 rounded-lg border transition-all duration-300 shadow-md ${
+                  className={`absolute bottom-3 left-3 z-10 p-2 rounded-lg border transition-all duration-300 shadow-md ${
                     isInCart
                       ? "bg-primary border-primary text-primary-foreground shadow-[0_0_12px_rgba(197,160,89,0.4)] hover:bg-primary/95 hover:scale-105"
                       : "bg-background/80 hover:bg-background border-border text-muted-foreground hover:text-primary hover:scale-115"
@@ -222,35 +234,32 @@ export default function CatalogueView({ cart = [], onToggleCart }: CatalogueView
                   <img
                     src={product.imageUrl}
                     alt={product.designNumber}
-                    className="object-contain max-h-full max-w-full transition-transform duration-700 group-hover:scale-105"
+                    className="object-cover h-full w-full transition-transform duration-700 group-hover:scale-105"
                     loading="lazy"
                     onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                   />
                 ) : (
-                  <div className="relative w-24 h-24 flex items-center justify-center rounded-2xl bg-linear-to-br from-primary/12 via-primary/3 to-transparent border border-primary/20 shadow-[inset_0_0_12px_rgba(197,160,89,0.08)] group-hover:border-primary/35 transition-colors duration-500">
-                    <span className="text-4xl drop-shadow-[0_0_8px_rgba(197,160,89,0.4)] animate-pulse">💎</span>
-                    <span className="absolute top-1.5 right-1.5 text-[10px] text-primary/60">✨</span>
+                  <div className="relative w-full h-full flex items-center justify-center bg-linear-to-br from-primary/12 via-primary/3 to-transparent shadow-[inset_0_0_12px_rgba(197,160,89,0.08)] transition-colors duration-500">
+                    <span className="text-5xl drop-shadow-[0_0_8px_rgba(197,160,89,0.4)] animate-pulse">💎</span>
+                    <span className="absolute top-2 right-2 text-xs text-primary/60">✨</span>
                   </div>
                 )}
               </div>
 
-              {/* ── Details ── responsive flex-layout with no hardcoded layout breaks */}
-              <CardContent className="p-3 text-center flex-1 flex flex-col justify-between gap-1.5">
-                <p className="font-mono text-sm sm:text-base font-bold uppercase tracking-wider text-foreground truncate" title={product.designNumber}>
-                  {product.designNumber}
-                </p>
-                <div className="flex flex-col gap-0.5 text-[11px] text-muted-foreground/80 font-medium">
-                  <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                    <span>Gross: {product.grossWeight}g</span>
-                    <span className="opacity-30">|</span>
-                    <span>Purity: {product.metalPurity}</span>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground/60 uppercase tracking-widest mt-0.5">
-                    {product.metalType}
+              {/* ── Details ── */}
+              <CardContent className="p-3 text-left flex-1 flex flex-row items-end justify-between relative">
+                <div className="flex flex-col gap-0.5 w-full">
+                  <p className="font-mono text-xs sm:text-sm font-bold uppercase tracking-wider text-foreground truncate pr-1" title={product.designNumber}>
+                    {product.designNumber}
                   </p>
+                  <div className="flex flex-col gap-0.5 text-[10px] sm:text-[11px] text-muted-foreground font-medium">
+                    <span>G.WT: {product.grossWeight}g</span>
+                    <span>N.WT: {product.netWeight}g</span>
+                  </div>
                 </div>
-                <div className="mt-2 flex justify-center">
-                  <QRButton sku={product.sku} productName={product.designNumber} />
+                {/* QR code on the right */}
+                <div className="shrink-0 ml-1">
+                  <StaticQR sku={product.sku} />
                 </div>
               </CardContent>
             </Card>
@@ -273,10 +282,10 @@ export default function CatalogueView({ cart = [], onToggleCart }: CatalogueView
 
       {/* ── PAGINATION ──────────────────────────────────────────────────────── */}
       {totalPages > 1 && !error && (
-        <div className="flex items-center justify-between bg-card px-5 py-3.5 border border-border rounded-xl shadow-[0_4px_16px_rgba(0,0,0,0.12)] mt-6">
+        <div className="flex flex-col sm:flex-row items-center justify-between bg-card px-5 py-3.5 border border-border rounded-xl shadow-[0_4px_16px_rgba(0,0,0,0.12)] mt-6 gap-3 text-center sm:text-left">
           <p className="text-xs text-muted-foreground font-medium">
             Page <span className="text-foreground font-semibold">{currentPage}</span> of <span className="text-foreground font-semibold">{totalPages}</span>
-            {totalItems > 0 && <span> · {totalItems.toLocaleString()} total</span>}
+            {totalItems > 0 && <span className="whitespace-nowrap"> · {totalItems.toLocaleString()} total</span>}
           </p>
           <div className="flex items-center gap-2">
             <Button

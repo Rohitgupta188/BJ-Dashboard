@@ -19,16 +19,31 @@ export const GET = withAuth(async (req: NextRequest) => {
     const page     = Math.max(1, parseInt(searchParams.get("page")     ?? "1",  10));
     const pageSize = Math.max(1, parseInt(searchParams.get("pageSize") ?? "20", 10));
     const search   = searchParams.get("search")?.trim() ?? "";
+    const startDate = searchParams.get("startDate");
+    const endDate   = searchParams.get("endDate");
 
-    const filter = search
-      ? {
-          $or: [
-            { quotationNo:  { $regex: search, $options: "i" } },
-            { companyName:  { $regex: search, $options: "i" } },
-            { contactName:  { $regex: search, $options: "i" } },
-          ],
-        }
-      : {};
+    const filter: any = {};
+
+    if (search) {
+      filter.$or = [
+        { quotationNo:  { $regex: search, $options: "i" } },
+        { companyName:  { $regex: search, $options: "i" } },
+        { contactName:  { $regex: search, $options: "i" } },
+      ];
+    }
+
+    if (startDate || endDate) {
+      filter.date = {};
+      if (startDate) {
+        filter.date.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        // Set to end of day for the endDate
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        filter.date.$lte = end;
+      }
+    }
 
     const [quotations, total] = await Promise.all([
       Quotation.find(filter)
