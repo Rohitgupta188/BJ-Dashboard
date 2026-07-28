@@ -1,6 +1,7 @@
 import mongoose, { Schema, models, model } from "mongoose";
 
 export interface IDriveChannel {
+  _id: string;          // singleton key — always "main"
   channelId: string;  // UUID we assigned when registering the channel
   resourceId: string; // Google's resource ID (required to stop the channel)
   pageToken: string;  // Latest drive.changes.list page token
@@ -10,6 +11,7 @@ export interface IDriveChannel {
 
 const DriveChannelSchema = new Schema<IDriveChannel>(
   {
+    _id:        { type: String },          // allows "main" as a singleton doc ID
     channelId:  { type: String, required: true },
     resourceId: { type: String, required: true },
     pageToken:  { type: String, required: true },

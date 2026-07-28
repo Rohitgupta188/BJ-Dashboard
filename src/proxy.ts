@@ -44,6 +44,7 @@ const PUBLIC_PREFIXES = [
   "/api/catalog/", 
   "/api/image-proxy",
   "/api/network-ip",
+  "/api/drive/",      // Google Drive push notifications — no user session available
 ];
 
 function getSecret(): Uint8Array {
