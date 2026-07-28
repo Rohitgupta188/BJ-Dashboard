@@ -4,8 +4,17 @@ import { hashPassword, verifyPassword, signTokenPair, hashToken, verifyToken } f
 import type { JwtPayload } from "@/lib/auth";
 
 type AuthResult =
-  | { ok: true; user: IUser; accessToken: string; refreshToken: string }
+  | { ok: true; user: IUser; accessToken: string; refreshToken: string; sid: string }
   | { ok: false; error: string; status: number };
+
+const MAX_SESSIONS = 5;
+
+function manageSessionsLimit(user: IUser) {
+  if (user.sessions.length > MAX_SESSIONS) {
+    user.sessions.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    user.sessions = user.sessions.slice(-MAX_SESSIONS);
+  }
+}
 
 export async function registerUser(data: {
   username: string;
@@ -19,13 +28,11 @@ export async function registerUser(data: {
   }).lean();
 
   if (existingUser) {
-    const field =
-      (existingUser as IUser).email === data.email ? "Email" : "Username";
+    const field = (existingUser as IUser).email === data.email ? "Email" : "Username";
     return { ok: false, error: `${field} is already taken`, status: 409 };
   }
 
   const hashedPassword = await hashPassword(data.password);
-
   const adminEmails = (process.env.ADMIN_EMAILS || "").split(",").map((e) => e.trim().toLowerCase());
   const assignedRole = adminEmails.includes(data.email.toLowerCase()) ? "admin" : "employee";
 
@@ -34,21 +41,29 @@ export async function registerUser(data: {
     email: data.email,
     password: hashedPassword,
     role: assignedRole,
+    sessions: [],
   });
 
-  const tokenPayload: Omit<JwtPayload, "type"> = {
+  const tokenPayload: Omit<JwtPayload, "type" | "sid"> = {
     sub: user._id.toString(),
     email: user.email,
     username: user.username,
     role: assignedRole,
   };
 
-  const { accessToken, refreshToken } = await signTokenPair(tokenPayload);
+  const { accessToken, refreshToken, sid } = await signTokenPair(tokenPayload);
 
-  user.refreshTokenHash = await hashToken(refreshToken);
+  user.sessions.push({
+    sessionId: sid,
+    refreshTokenHash: await hashToken(refreshToken),
+    lastRefreshTokenHash: null,
+    refreshTokenRotatedAt: null,
+    createdAt: new Date(),
+  });
+
   await user.save();
 
-  return { ok: true, user, accessToken, refreshToken };
+  return { ok: true, user, accessToken, refreshToken, sid };
 }
 
 export async function loginUser(data: {
@@ -57,9 +72,7 @@ export async function loginUser(data: {
 }): Promise<AuthResult> {
   await connectToDatabase();
 
-  const user = await User.findOne({ email: data.email }).select(
-    "+password +refreshTokenHash"
-  );
+  const user = await User.findOne({ email: data.email }).select("+password +sessions");
 
   if (!user) {
     return { ok: false, error: "USER_NOT_FOUND", status: 401 };
@@ -71,24 +84,42 @@ export async function loginUser(data: {
     return { ok: false, error: "INVALID_PASSWORD", status: 401 };
   }
 
-  const tokenPayload: Omit<JwtPayload, "type"> = {
+  const tokenPayload: Omit<JwtPayload, "type" | "sid"> = {
     sub: user._id.toString(),
     email: user.email,
     username: user.username,
     role: user.role,
   };
 
-  const { accessToken, refreshToken } = await signTokenPair(tokenPayload);
+  const { accessToken, refreshToken, sid } = await signTokenPair(tokenPayload);
 
-  user.refreshTokenHash = await hashToken(refreshToken);
+  if (!user.sessions) user.sessions = [];
+  
+  user.sessions.push({
+    sessionId: sid,
+    refreshTokenHash: await hashToken(refreshToken),
+    lastRefreshTokenHash: null,
+    refreshTokenRotatedAt: null,
+    createdAt: new Date(),
+  });
+
+  manageSessionsLimit(user);
   await user.save();
 
-  return { ok: true, user, accessToken, refreshToken };
+  return { ok: true, user, accessToken, refreshToken, sid };
 }
 
-export async function logoutUser(userId: string): Promise<void> {
+export async function logoutUser(userId: string, sid?: string): Promise<void> {
   await connectToDatabase();
-  await User.findByIdAndUpdate(userId, { refreshTokenHash: null });
+  
+  if (sid) {
+    await User.findByIdAndUpdate(userId, {
+      $pull: { sessions: { sessionId: sid } }
+    });
+  } else {
+    // Logout from all devices
+    await User.findByIdAndUpdate(userId, { sessions: [] });
+  }
 }
 
 export function sanitizeUser(user: IUser) {
@@ -112,50 +143,62 @@ export async function rotateRefreshToken(refreshToken: string): Promise<AuthResu
     return { ok: false, error: "Invalid refresh token", status: 401 };
   }
 
-  const { sub, email, username, role } = refreshResult.payload;
+  const { sub, email, username, role, sid } = refreshResult.payload;
   
-  const user = await User.findById(sub).select(
-    "+refreshTokenHash +lastRefreshTokenHash +refreshTokenRotatedAt"
-  );
+  if (!sid) {
+    console.log("rotateRefreshToken failed: No session ID in token");
+    return { ok: false, error: "Session invalid", status: 401 };
+  }
 
-  if (!user) {
+  const user = await User.findById(sub).select("+sessions");
+
+  if (!user || !user.sessions) {
     console.log("rotateRefreshToken failed: User not found");
+    return { ok: false, error: "Session expired. Please log in again.", status: 401 };
+  }
+
+  const session = user.sessions.find(s => s.sessionId === sid);
+  
+  if (!session) {
+    console.log("rotateRefreshToken failed: Session not found (already revoked)");
     return { ok: false, error: "Session expired. Please log in again.", status: 401 };
   }
 
   const incomingHash = await hashToken(refreshToken);
   let isGracePeriod = false;
 
-  if (incomingHash !== user.refreshTokenHash) {
+  if (incomingHash !== session.refreshTokenHash) {
     if (
-      user.lastRefreshTokenHash &&
-      incomingHash === user.lastRefreshTokenHash &&
-      user.refreshTokenRotatedAt &&
-      Date.now() - new Date(user.refreshTokenRotatedAt).getTime() < 60000
+      session.lastRefreshTokenHash &&
+      incomingHash === session.lastRefreshTokenHash &&
+      session.refreshTokenRotatedAt &&
+      Date.now() - new Date(session.refreshTokenRotatedAt).getTime() < 60000
     ) {
-      console.log("rotateRefreshToken: Grace period active");
+      console.log("rotateRefreshToken: Grace period active for session", sid);
       isGracePeriod = true;
     } else {
-      console.log("rotateRefreshToken failed: Hash mismatch. Incoming:", incomingHash, "Current:", user.refreshTokenHash);
-      await User.findByIdAndUpdate(sub, {
-        refreshTokenHash: null,
-        lastRefreshTokenHash: null,
-        refreshTokenRotatedAt: null,
-      });
+      console.log("rotateRefreshToken failed: Hash mismatch for session", sid);
+      // Token theft detected on this specific session. Revoke it.
+      user.sessions = user.sessions.filter(s => s.sessionId !== sid);
+      await user.save();
       return { ok: false, error: "Session invalid. Please log in again.", status: 401 };
     }
   }
 
   const { accessToken: newAccessToken, refreshToken: newRefreshToken } =
-    await signTokenPair({ sub, email, username, role: user.role });
+    await signTokenPair({ sub, email, username, role: user.role, sid });
 
   if (!isGracePeriod) {
-    user.lastRefreshTokenHash = incomingHash;
-    user.refreshTokenRotatedAt = new Date();
+    session.lastRefreshTokenHash = incomingHash;
+    session.refreshTokenRotatedAt = new Date();
   }
-  user.refreshTokenHash = await hashToken(newRefreshToken);
+  
+  session.refreshTokenHash = await hashToken(newRefreshToken);
+  
+  // Mark the sessions array as modified so mongoose saves the nested changes
+  user.markModified('sessions');
   await user.save();
 
-  console.log("rotateRefreshToken succeeded");
-  return { ok: true, user, accessToken: newAccessToken, refreshToken: newRefreshToken };
+  console.log("rotateRefreshToken succeeded for session", sid);
+  return { ok: true, user, accessToken: newAccessToken, refreshToken: newRefreshToken, sid };
 }

@@ -68,7 +68,8 @@ export function withAuth<T = Record<string, unknown>>(
           email: result.user.email, 
           username: result.user.username, 
           role: result.user.role, 
-          type: "access" 
+          type: "access",
+          sid: result.sid
         },
       });
 

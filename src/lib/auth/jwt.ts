@@ -18,6 +18,7 @@ export interface JwtPayload {
   username: string;
   role: "admin" | "employee";
   type: "access" | "refresh";
+  sid: string; 
 }
 
 export async function signAccessToken(
@@ -45,13 +46,17 @@ async function signRefreshToken(
 }
 
 export async function signTokenPair(
-  payload: Omit<JwtPayload, "type">
-): Promise<{ accessToken: string; refreshToken: string }> {
+  payload: Omit<JwtPayload, "type" | "sid"> & { sid?: string }
+): Promise<{ accessToken: string; refreshToken: string; sid: string }> {
+  const sid = payload.sid || crypto.randomUUID();
+  const fullPayload = { ...payload, sid };
+  
   const [accessToken, refreshToken] = await Promise.all([
-    signAccessToken(payload),
-    signRefreshToken(payload),
+    signAccessToken(fullPayload),
+    signRefreshToken(fullPayload),
   ]);
-  return { accessToken, refreshToken };
+  
+  return { accessToken, refreshToken, sid };
 }
 
 export async function hashToken(token: string): Promise<string> {
