@@ -42,6 +42,30 @@ async function processChanges(): Promise<void> {
   let pageToken: string | null | undefined = channel.pageToken;
   let totalProcessed = 0;
 
+  // ── Helper: check if a file lives in the watched folder OR any subfolder ──
+  // The Drive API `parents` array only contains the *direct* parent folder.
+  // We walk one level up so files in subfolders (e.g. EXHIBITION EXCEL) are
+  // also matched without needing to hard-code subfolder IDs.
+  async function isInWatchedFolder(fileParents: string[]): Promise<boolean> {
+    // Direct child of the watched folder
+    if (fileParents.includes(folderId)) return true;
+
+    // One level deep — check each parent folder's own parents
+    for (const parentId of fileParents) {
+      try {
+        const parentRes = await drive.files.get({
+          fileId: parentId,
+          fields: "parents",
+        });
+        const grandparents: string[] = parentRes.data.parents ?? [];
+        if (grandparents.includes(folderId)) return true;
+      } catch {
+        // parent folder not accessible — skip
+      }
+    }
+    return false;
+  }
+
   while (pageToken) {
     const changesRes: GaxiosResponseWithHTTP2<drive_v3.Schema$ChangeList> =
       await drive.changes.list({
@@ -65,7 +89,7 @@ async function processChanges(): Promise<void> {
       const mimeType = file.mimeType ?? "";
       const parents  = file.parents  ?? [];
 
-      const isInFolder = parents.includes(folderId);
+      const isInFolder = await isInWatchedFolder(parents);
       const isFMSSheet =
         mimeType === GOOGLE_SHEET_MIME && !!SHEET_ID && fileId === SHEET_ID;
 
