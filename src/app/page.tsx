@@ -170,7 +170,7 @@ function DashboardContent() {
         </div>
 
         {/* ── Global Mobile Bottom Navigation ── */}
-        <div className="fixed bottom-0 left-0 right-0 z-50 lg:hidden bg-card/90 backdrop-blur-2xl border-t border-border shadow-[0_-10px_40px_rgba(0,0,0,0.08)] px-6 py-2 pb-safe">
+        <div className="fixed bottom-0 left-0 right-0 z-40 lg:hidden bg-card/90 backdrop-blur-2xl border-t border-border shadow-[0_-10px_40px_rgba(0,0,0,0.08)] px-6 py-2 pb-safe">
           <div className="flex items-center justify-between max-w-md mx-auto">
             <button onClick={() => setActiveTab("Quotations")} className={`flex flex-col items-center justify-center gap-1 p-2 min-w-16 transition-colors group ${activeTab === "Quotations" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
               <Home className="h-5.5 w-5.5 group-hover:scale-110 transition-transform" strokeWidth={2.5} />
