@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
-import { getDriveClient } from "@/lib/drive/client";
-import Catalog from "@/models/Catalog";
+import { getDriveClient }  from "@/lib/drive/client";
+import Catalog             from "@/models/Catalog";
+import { makeRowReader }   from "@/lib/drive/normalize";
 
 
 type ItemStatus = "CATALOGUE" | "INSTOCK";
@@ -39,30 +40,31 @@ export interface ExcelProcessResult {
 function parseRow(
   raw: Record<string, unknown>
 ): ParsedRow | null {
-  const sku = String(raw["SKU Number"] ?? "").trim();
-  if (!sku) return null; // SKU is the minimum required field
+  const get = makeRowReader(raw);
 
-  const designNumber  = String(raw["Design Number"] ?? "").trim();
-  const imageNameCell = String(raw["Image Name"]    ?? "").trim();
+  const sku = get("SKU Number", "SKUNumber", "sku");
+  if (!sku) return null; 
 
-  // Priority: explicit cell → designNumber
+  const designNumber  = get("Design Number", "DesignNumber");
+  const imageNameCell = get("Image Name",    "ImageName");
+
+  // Priority: explicit Image Name cell → fall back to Design Number
   const imageName = imageNameCell || designNumber;
 
-  // Read itemStatus from the Excel column; normalise & default safely
-  const itemStatus = parseItemStatus(raw["Item Status"]);
+  const itemStatus = parseItemStatus(get("Item Status", "ItemStatus", "Status"));
 
   return {
     sku,
     designNumber,
-    rfid:           String(raw["RFID Tag"]        ?? "").trim(),
+    rfid:           get("RFID Tag",       "RFID",          "RFIDTag"),
     imageName,
-    itemType:       String(raw["Item Type"]        ?? "").trim(),
-    grossWeight:    Number(raw["Gross Weight"])    || 0,
-    netWeight:      Number(raw["Net Weight"])      || 0,
-    stoneWeight:    Number(raw["Stone Weight"])    || 0,
-    collectionLine: String(raw["Collection Line"] ?? "").trim(),
-    metalType:      String(raw["Metal Type"]       ?? "").trim(),
-    metalPurity:    String(raw["Metal Purity"]     ?? "").trim(),
+    itemType:       get("Item Type",       "ItemType"),
+    grossWeight:    Number(get("Gross Weight",    "GrossWeight"))  || 0,
+    netWeight:      Number(get("Net Weight",      "NetWeight"))    || 0,
+    stoneWeight:    Number(get("Stone Weight",    "StoneWeight"))  || 0,
+    collectionLine: get("Collection Line",  "CollectionLine"),
+    metalType:      get("Metal Type",        "MetalType"),
+    metalPurity:    get("Metal Purity",      "MetalPurity"),
     itemStatus,
     isCatalog: itemStatus === "CATALOGUE",
     isInstock:  itemStatus === "INSTOCK",
@@ -76,6 +78,8 @@ export async function processExcelFile(
 ): Promise<ExcelProcessResult> {
   const drive  = getDriveClient();
   const errors: string[] = [];
+
+  console.log(`[drive/excel] Processing ${fileName} (fileId=${fileId})...`);
 
   const downloadRes = await drive.files.get(
     { fileId, alt: "media" },
@@ -113,7 +117,7 @@ export async function processExcelFile(
     bulkOps.push({
       updateOne: {
         filter: { sku: row.sku },
-        update: { $set: row },
+        update: { $set: { ...row, driveFileId: fileId } },  // tag with source Drive file ID
         upsert: true,
       },
     });

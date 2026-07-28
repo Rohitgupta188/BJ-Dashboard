@@ -3,8 +3,6 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
 import {
   ScannerManager,
-  HIDAdapter,
-  PhoneAdapter,
   type Statuses,
 } from "@/scanner";
 import { SerialAdapter } from "@/scanner/adapters/serial";
@@ -45,8 +43,7 @@ export function ScannerProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const manager = new ScannerManager()
-      .register(new HIDAdapter())
-      .register(new PhoneAdapter())
+  
       .register(new SerialAdapter());
 
     managerRef.current = manager;

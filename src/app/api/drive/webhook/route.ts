@@ -4,8 +4,9 @@ import { getDriveClient } from "@/lib/drive/client";
 import { connectToDatabase } from "@/lib/db";
 import DriveChannel from "@/models/DriveChannel";
 import { IMAGE_MIME_TYPES, processImageFile } from "@/lib/drive/processors/images";
-import { processExcelFile } from "@/lib/drive/processors/excel";
+import { processExcelFile }    from "@/lib/drive/processors/excel";
 import { processCustomerSheet } from "@/lib/drive/processors/sheets";
+import { processDeletedFile }  from "@/lib/drive/processors/delete";
 import { GaxiosResponseWithHTTP2 } from "googleapis-common";
 import { drive_v3 } from "googleapis";
 
@@ -80,14 +81,36 @@ async function processChanges(): Promise<void> {
     const changes = changesRes.data.changes ?? [];
 
     for (const change of changes) {
-      // Skip deletions and trashed files
-      if (change.removed || change.file?.trashed) continue;
-      // Skip incomplete change objects
-      if (!change.fileId || !change.file) continue;
+      if (!change.fileId) continue; // malformed event
 
       const { fileId, file } = change;
-      const mimeType = file.mimeType ?? "";
-      const parents  = file.parents  ?? [];
+      const mimeType = file?.mimeType ?? "";
+      const parents  = file?.parents  ?? [];
+      const fileName = file?.name;
+
+      // ── Deletion / trash ────────────────────────────────────────────────────
+      if (change.removed || file?.trashed) {
+        // When a file is fully purged, Drive sends the change with file=null.
+        // We still attempt cleanup using whatever metadata we have.
+        const isWatched =
+          parents.length > 0 ? await isInWatchedFolder(parents) : true;
+
+        if (isWatched) {
+          try {
+            await processDeletedFile(fileId, fileName, mimeType);
+            totalProcessed++;
+          } catch (err) {
+            console.error(
+              `[drive/webhook] Delete handler failed for fileId=${fileId}:`,
+              err instanceof Error ? err.message : err
+            );
+          }
+        }
+        continue; // do not fall through to add/update logic
+      }
+
+      // ── Addition / update ───────────────────────────────────────────────────
+      if (!file) continue; // no metadata available — skip
 
       const isInFolder = await isInWatchedFolder(parents);
       const isFMSSheet =

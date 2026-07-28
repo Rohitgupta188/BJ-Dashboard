@@ -5,7 +5,8 @@ import Image from "next/image";
 import {
   Scan, X, Clock, ChevronRight, Loader2, ShoppingCart,
   Trash2, FileDown, AlertTriangle, CheckCircle2,
-  Wifi, WifiOff, Keyboard, CheckCircle,
+  Wifi, WifiOff, Keyboard, CheckCircle, Bluetooth,
+  Home, User, ScanBarcode, FileText, ScanLine
 } from "lucide-react";
 import { useScannerContext } from "@/components/scanner-provider";
 import BluetoothPanel from "@/components/dashboard/bluetooth-panel";
@@ -46,28 +47,6 @@ function buildImageUrl(p: Product): string | null {
     return `${process.env.NEXT_PUBLIC_IMAGEKIT_URL_ENDPOINT}/${p.storagePath}`;
   }
   return p.imageUrl ?? null;
-}
-
-// ── Status badge ───────────────────────────────────────────────────────────────
-function AdapterBadge({ id, label, status }: { id: string; label: string; status: AdapterStatus | undefined }) {
-  const s = status ?? "offline";
-  const colours: Record<AdapterStatus, string> = {
-    ready: "border-emerald-700/40 bg-emerald-900/15 text-emerald-400",
-    connecting: "border-amber-700/40 bg-amber-900/15 text-amber-400",
-    offline: "border-border bg-muted/20 text-muted-foreground",
-  };
-  const Icon = id === "hid" ? Keyboard : s === "ready" ? Wifi : WifiOff;
-  const statusLabel: Record<AdapterStatus, string> = {
-    ready: id === "hid" ? "Scanner Ready" : "Phone Live",
-    connecting: "Connecting…",
-    offline: id === "hid" ? "Listening" : "Phone Offline",
-  };
-  return (
-    <span className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-medium ${colours[s]}`} title={label}>
-      <Icon className="h-3 w-3" />
-      {statusLabel[s]}
-    </span>
-  );
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
@@ -130,6 +109,17 @@ export default function SalesQuotationView() {
         { sku: item.sku, designNumber: item.designNumber, scannedAt: new Date() },
         ...prev.filter(p => p.sku !== item.sku).slice(0, 9),
       ]);
+      
+      // Auto-add to quotation
+      setLineItems(prev => {
+        const existingIdx = prev.findIndex(li => li.product.sku === item.sku);
+        if (existingIdx >= 0) {
+          const next = [...prev];
+          next[existingIdx] = { ...next[existingIdx], qty: next[existingIdx].qty + 1 };
+          return next;
+        }
+        return [...prev, { product: item, qty: 1, addedAt: new Date() }];
+      });
     } catch {
       setNotFound(true);
       setProduct(null);
@@ -163,19 +153,6 @@ export default function SalesQuotationView() {
   };
 
   // ── Quotation helpers ──────────────────────────────────────────────────────
-  const addToQuote = useCallback(() => {
-    if (!product) return;
-    setLineItems(prev => {
-      const existingIdx = prev.findIndex(li => li.product.sku === product.sku);
-      if (existingIdx >= 0) {
-        const next = [...prev];
-        next[existingIdx] = { ...next[existingIdx], qty: next[existingIdx].qty + 1 };
-        return next;
-      }
-      return [...prev, { product, qty: 1, addedAt: new Date() }];
-    });
-  }, [product]);
-
   const removeFromQuote = (sku: string) =>
     setLineItems(prev => prev.filter(li => li.product.sku !== sku));
 
@@ -198,23 +175,42 @@ export default function SalesQuotationView() {
         <div className="flex-1 flex flex-col gap-4 min-w-0">
 
           {/* Status bar */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-border bg-card px-5 py-3.5 shadow-sm">
+          <div className="flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-3 rounded-xl border border-border bg-card px-5 py-4 shadow-sm">
             <div className="flex items-center gap-2.5 flex-1">
-              <Scan className="h-5 w-5 text-primary shrink-0" />
+              <Scan className="h-5 w-5 text-[#C5A059] shrink-0 hidden lg:block" />
               <div>
-                <p className="text-sm font-semibold text-foreground">Sales Quotation</p>
-                <p className="text-[11px] text-muted-foreground">
-                  Scan with a Bluetooth / USB scanner or{" "}
-                  <a href="/scan" target="_blank" rel="noopener noreferrer" className="text-primary underline-offset-2 hover:underline">
-                    open phone scanner
-                  </a>
+                <p className="text-xl lg:text-sm font-bold lg:font-semibold text-foreground tracking-tight">Sales Quotation</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5 hidden lg:block">
+                  Scan with Bluetooth / USB or phone camera
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              {Object.entries(adapterLabels).map(([id, label]) => (
-                <AdapterBadge key={id} id={id} label={label} status={statuses[id]} />
-              ))}
+            <div className="flex items-center gap-3 flex-wrap lg:justify-end">
+              <button 
+                onClick={() => {
+                  if (statuses['serial'] === 'ready') {
+                    disconnectAdapter('serial');
+                  } else {
+                    requestAdapterConnection('serial').catch((err) => {
+                      if (err?.message !== 'cancelled' && err !== 'cancelled') {
+                        console.error('Bluetooth connection failed:', err);
+                      }
+                    });
+                  }
+                }}
+                className={`group flex items-center justify-center h-10 w-10 rounded-full transition-all shadow-sm border ${statuses['serial'] === 'ready' ? 'border-emerald-500/40 bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'border-[#C5A059]/40 bg-[#C5A059]/5 text-[#C5A059] hover:bg-[#C5A059]/15'}`}
+                title={statuses['serial'] === 'ready' ? 'Bluetooth Connected (Click to disconnect)' : 'Connect Bluetooth'}
+              >
+                <Bluetooth className="h-5 w-5 group-hover:scale-110 transition-transform" />
+              </button>
+              
+              <a 
+                href="/scan" 
+                className="flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-5 py-2 text-sm font-semibold text-primary hover:bg-primary/20 transition shadow-sm"
+              >
+                <ScanBarcode className="h-4 w-4" />
+                Open Scanner
+              </a>
             </div>
           </div>
 
@@ -229,7 +225,7 @@ export default function SalesQuotationView() {
                 placeholder="Waiting for scanner… or type a SKU and press Enter"
                 onChange={() => { }}
                 onKeyDown={handleManualKeyDown}
-                className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-border bg-card text-sm text-foreground placeholder:text-muted-foreground/40 font-mono focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/50 transition"
+                className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground/50 font-mono focus:outline-none focus:ring-2 focus:ring-[#C5A059]/40 focus:border-[#C5A059]/50 transition shadow-inner"
               />
             </div>
             {currentInput && (
@@ -300,23 +296,17 @@ export default function SalesQuotationView() {
                   {product.metalPurity && <Spec label="Purity" value={product.metalPurity} />}
                   {product.metalType && <Spec label="Metal" value={product.metalType} />}
                 </div>
-                <div className="mt-auto flex items-center gap-2">
-                  <button
-                    onClick={addToQuote}
-                    className="flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-4 py-2 text-xs font-semibold text-primary hover:bg-primary/20 transition"
-                  >
-                    <ShoppingCart className="h-3.5 w-3.5" /> Add to Quote
-                  </button>
+                <div className="mt-auto flex items-center justify-end gap-2">
                   <button onClick={() => { setProduct(null); setNotFound(false); }} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition px-2 py-2">
-                    <X className="h-3.5 w-3.5" /> Clear
+                    <X className="h-3.5 w-3.5" /> Dismiss
                   </button>
                 </div>
               </div>
             </div>
           ) : (
             <ProductPlaceholder>
-              <div className="h-16 w-16 rounded-2xl border border-primary/20 bg-primary/5 flex items-center justify-center">
-                <Scan className="h-8 w-8 text-primary/50" />
+              <div className="h-16 w-16 rounded-2xl border border-[#C5A059]/30 bg-[#C5A059]/5 flex items-center justify-center shadow-sm">
+                <Scan className="h-8 w-8 text-[#C5A059]" />
               </div>
               <div>
                 <p className="text-sm font-semibold text-foreground">Ready to scan</p>
@@ -390,27 +380,30 @@ export default function SalesQuotationView() {
             )}
           </div>
 
-          {/* Scan history */}
+        {/* Scan history */}
           {history.length > 0 && (
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-3">
               <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground px-1">
                 <Clock className="h-3.5 w-3.5" />
                 Recent Scans
               </div>
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-2 pb-24">
                 {history.map((h, i) => (
                   <button
                     key={`${h.sku}-${i}`}
                     onClick={() => fetchProduct(h.sku)}
-                    className="group flex items-center justify-between gap-2 rounded-xl border border-border bg-card px-3 py-2 text-left transition hover:border-primary/40"
+                    className="group flex items-center justify-between gap-3 rounded-xl border border-border bg-card shadow-sm px-4 py-3 text-left transition hover:border-[#C5A059]/40 hover:bg-[#C5A059]/5"
                   >
-                    <div className="min-w-0">
-                      <p className="font-mono text-xs font-semibold text-foreground truncate">{h.designNumber}</p>
-                      <p className="text-[10px] text-muted-foreground">
+                    <div className="h-10 w-10 shrink-0 bg-muted/30 rounded-lg flex items-center justify-center border border-border group-hover:border-[#C5A059]/30 transition-colors">
+                      <ScanBarcode className="h-4 w-4 text-muted-foreground/50 group-hover:text-[#C5A059] transition-colors" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-mono text-[13px] font-bold text-foreground truncate group-hover:text-[#C5A059] transition-colors">{h.designNumber}</p>
+                      <p className="text-[11px] text-muted-foreground font-medium">
                         {h.scannedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                       </p>
                     </div>
-                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/30 group-hover:text-primary transition shrink-0" />
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/30 group-hover:text-[#C5A059] transition shrink-0" />
                   </button>
                 ))}
               </div>

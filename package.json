@@ -12,7 +12,9 @@
     "find:missing:images": "tsx --env-file=.env.local scripts/find-missing-images.ts",
     "fix:designnumber:index": "tsx --env-file=.env.local scripts/fix-designnumber-index.ts",
     "backfill:images": "tsx --env-file=.env.local scripts/backfill-images-by-design.ts",
-    "register:webhook": "tsx --env-file=.env.local scripts/register-webhook.ts"
+    "register:webhook": "tsx --env-file=.env.local scripts/register-webhook.ts",
+    "sync:customers": "tsx --env-file=.env.local scripts/sync-customers.ts",
+    "inspect:sheet": "tsx --env-file=.env.local scripts/inspect-sheet.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1075.0",

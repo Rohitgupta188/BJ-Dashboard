@@ -9,5 +9,4 @@ export type { ScannerAdapter, AdapterStatus } from "./types";
 export type { Statuses } from "./scanner-manager";
 export { ScannerManager } from "./scanner-manager";
 export { HIDAdapter } from "./adapters/hid";
-export { PhoneAdapter } from "./adapters/phone";
 export { SerialAdapter } from "./adapters/serial";

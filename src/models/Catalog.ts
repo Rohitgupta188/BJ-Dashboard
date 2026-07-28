@@ -5,6 +5,8 @@ export interface ICatalog extends Document {
   designNumber: string;
   rfid: string;
 
+  driveFileId?: string;      
+
   imageName: string;
   storageProvider: "backblaze";
   storagePath: string;
@@ -49,6 +51,11 @@ const CatalogSchema = new Schema<ICatalog>(
       type: String,
       required: true,
       trim: true,
+    },
+
+    driveFileId: {
+      type: String,
+      index: true,
     },
 
     imageName: {

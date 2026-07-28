@@ -16,8 +16,8 @@ function StaticQR({ sku }: { sku: string }) {
       .catch(console.error);
   }, [sku]);
   
-  if (!src) return <div className="w-[50px] h-[50px] bg-muted/20 rounded-md animate-pulse" />;
-  return <img src={src} alt={`QR for ${sku}`} className="w-[50px] h-[50px] rounded-md shadow-sm border border-border" />;
+  if (!src) return <div className="w-12.5 h-12.5 bg-muted/20 rounded-md animate-pulse" />;
+  return <img src={src} alt={`QR for ${sku}`} className="w-12.5 h-12.5 rounded-md shadow-sm border border-border" />;
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────

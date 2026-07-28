@@ -1,14 +1,21 @@
 import { getSheetsClient } from "@/lib/drive/client";
 import Customer from "@/models/Customer";
-
-function normalizeHeader(h: string): string {
-  return h.toLowerCase().replace(/[^a-z0-9]/g, "");
-}
+import {
+  normalizeKey,
+  normalizeHeaders,
+  makeRowReader,
+} from "@/lib/drive/normalize";
 
 const HEADER_MAP: Record<string, string> = {
+  // New headers from "New Customer Registration Form"
+  companyname:    "name",
+  personname:     "contactName",
+  whatsappnumber: "phone",
+  companyaddress: "address",
+  
+  // Legacy headers just in case
   name:           "name",
   firmname:       "name",
-  companyname:    "name",
   customername:   "name",
   shopname:       "name",
   contact:        "contactName",
@@ -35,8 +42,14 @@ export async function processCustomerSheet(
 
   const metaRes = await sheets.spreadsheets.get({ spreadsheetId });
 
-  const sheetTitle =
-    metaRes.data.sheets?.[0]?.properties?.title ?? "Sheet1";
+  const allSheets = metaRes.data.sheets ?? [];
+  
+  const customerSheet = allSheets.find((s) => {
+    const t = s.properties?.title?.toLowerCase() || "";
+    return t.includes("new customer registration") || t === "customer registrations";
+  });
+
+  const sheetTitle = customerSheet?.properties?.title ?? allSheets[0]?.properties?.title ?? "Sheet1";
 
   const dataRes = await sheets.spreadsheets.values.get({
     spreadsheetId,
@@ -49,9 +62,7 @@ export async function processCustomerSheet(
     return { upserted: 0, skipped: 0, errors: [] };
   }
 
-  const normalizedHeaders: string[] = rows[0].map((h: unknown) =>
-    normalizeHeader(String(h))
-  );
+  const normalizedHeaders: string[] = normalizeHeaders(rows[0]);
 
   for (let i = 1; i < rows.length; i++) {
     const rowValues = rows[i] as unknown[];

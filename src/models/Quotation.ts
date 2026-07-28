@@ -34,6 +34,8 @@ export interface IQuotation extends Document {
 
   isDispatched: boolean;
 
+  createdBy?: string;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -75,6 +77,8 @@ const QuotationSchema = new Schema<IQuotation>(
     totalItems: { type: Number, default: 0 },
 
     isDispatched: { type: Boolean, default: false },
+
+    createdBy: { type: String },
   },
   {
     timestamps: true,

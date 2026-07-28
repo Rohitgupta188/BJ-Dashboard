@@ -12,7 +12,7 @@ import OtherViews from "@/components/dashboard/other-views";
 import CustomerView from "@/components/dashboard/customer-view";
 import CartDrawer from "@/components/dashboard/cart-drawer";
 import ProductsTableView from "@/components/dashboard/products-table-view";
-import { Loader2 } from "lucide-react";
+import { Loader2, Home, FileText, ScanLine, ScanBarcode, User, Settings, UserCheck, BookOpen } from "lucide-react";
 import CatalogImportPage from "@/components/dashboard/import-product";
 import { ScannerProvider, useScannerContext } from "@/components/scanner-provider";
 
@@ -167,6 +167,38 @@ function DashboardContent() {
           <main className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
             {renderActiveView()}
           </main>
+        </div>
+
+        {/* ── Global Mobile Bottom Navigation ── */}
+        <div className="fixed bottom-0 left-0 right-0 z-50 lg:hidden bg-card/90 backdrop-blur-2xl border-t border-border shadow-[0_-10px_40px_rgba(0,0,0,0.08)] px-6 py-2 pb-safe">
+          <div className="flex items-center justify-between max-w-md mx-auto">
+            <button onClick={() => setActiveTab("Quotations")} className={`flex flex-col items-center justify-center gap-1 p-2 min-w-16 transition-colors group ${activeTab === "Quotations" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+              <Home className="h-5.5 w-5.5 group-hover:scale-110 transition-transform" strokeWidth={2.5} />
+              <span className="text-[10px] font-bold">Home</span>
+            </button>
+            
+            <button onClick={() => setActiveTab("Catalogue")} className={`flex flex-col items-center justify-center gap-1 p-2 min-w-16 transition-colors group ${activeTab === "Catalogue" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+              <BookOpen className="h-5.5 w-5.5 group-hover:scale-110 transition-transform" strokeWidth={2.5} />
+              <span className="text-[10px] font-bold">Catalog</span>
+            </button>
+
+            <button className="relative -top-5 flex flex-col items-center justify-center group" onClick={() => setActiveTab("Sales")}>
+              <div className={`h-16 w-16 rounded-full text-primary-foreground shadow-[0_8px_20px_rgba(197,160,89,0.4)] flex items-center justify-center border-[5px] border-background group-hover:scale-105 transition-transform ${activeTab === "Sales" ? "bg-primary/80" : "bg-primary"}`}>
+                <ScanLine className="h-6.5 w-6.5" strokeWidth={2.5} />
+              </div>
+              <span className={`text-[10px] font-bold mt-1 ${activeTab === "Sales" ? "text-primary/80" : "text-primary"}`}>Scan</span>
+            </button>
+
+            <button onClick={() => setActiveTab("Customer")} className={`flex flex-col items-center justify-center gap-1 p-2 min-w-16 transition-colors group ${activeTab === "Customer" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+              <UserCheck className="h-5.5 w-5.5 group-hover:scale-110 transition-transform" strokeWidth={2.5} />
+              <span className="text-[10px] font-bold">Customer</span>
+            </button>
+            
+            <button onClick={() => setActiveTab("Settings")} className={`flex flex-col items-center justify-center gap-1 p-2 min-w-16 transition-colors group ${activeTab === "Settings" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+              <User className="h-5.5 w-5.5 group-hover:scale-110 transition-transform" strokeWidth={2.5} />
+              <span className="text-[10px] font-bold">Profile</span>
+            </button>
+          </div>
         </div>
       </div>
 

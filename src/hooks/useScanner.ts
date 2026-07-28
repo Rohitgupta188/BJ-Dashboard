@@ -4,7 +4,6 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import {
   ScannerManager,
   HIDAdapter,
-  PhoneAdapter,
   type Statuses,
 } from "@/scanner";
 import { SerialAdapter } from "@/scanner/adapters/serial";
@@ -56,7 +55,6 @@ export function useScanner(onScan: (sku: string) => void): UseScannerReturn {
   useEffect(() => {
     const manager = new ScannerManager()
       .register(new HIDAdapter())   // Phase 1: HID keyboard (USB/BT scanners, phone HID apps)
-      .register(new PhoneAdapter()) // Phase 2: Phone camera via /mobile-scanner (SSE over WiFi)
       .register(new SerialAdapter()); // Phase 3: USB serial or Bluetooth SPP (user-initiated)
     // ── Future: .register(new NFCAdapter()) ─────────────────────────────────
 

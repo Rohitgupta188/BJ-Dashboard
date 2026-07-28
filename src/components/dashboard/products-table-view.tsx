@@ -323,8 +323,100 @@ export default function ProductsTableView({ userRole }: { userRole?: string }) {
         </div>
       )}
 
-      {/* ── Table ───────────────────────────────────────────────────────────── */}
-      <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+      {/* ── Mobile Product Cards ────────────────────────────────────────────── */}
+      <div className="md:hidden flex flex-col gap-3 pb-24">
+        {/* Loading skeleton */}
+        {isLoading && Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="bg-card p-4 rounded-xl border border-border flex gap-4 animate-pulse">
+            <div className="h-16 w-16 bg-muted rounded-lg" />
+            <div className="flex-1 space-y-2 py-1">
+              <div className="h-4 bg-muted rounded w-1/3" />
+              <div className="h-3 bg-muted rounded w-1/2" />
+            </div>
+          </div>
+        ))}
+
+        {/* Empty state */}
+        {!isLoading && !error && items.length === 0 && (
+          <div className="bg-card rounded-xl border border-border p-8 text-center text-muted-foreground">
+            <CheckSquare className="h-10 w-10 mx-auto text-muted-foreground/30 mb-3" />
+            <p>No products found.</p>
+            <p className="text-xs mt-1">
+              {debouncedSearch ? `No results for "${debouncedSearch}"` : "Import products to get started"}
+            </p>
+          </div>
+        )}
+
+        {/* Real Cards */}
+        {!isLoading && items.map(product => {
+          const isSelected = selectedSkus.has(product.sku);
+          const isDeleting = deletingSkus.has(product.sku);
+          return (
+            <div 
+              key={product.sku}
+              onClick={() => userRole === "admin" && toggleOne(product.sku)}
+              className={`bg-card rounded-xl border overflow-hidden p-3 flex gap-3 shadow-sm transition-all ${isSelected ? "border-[#C5A059] ring-1 ring-[#C5A059]/20 bg-[#C5A059]/5" : "border-border"} ${isDeleting ? "opacity-40 pointer-events-none" : ""}`}
+            >
+              {/* Left image */}
+              <div className="h-20 w-20 shrink-0 bg-muted/10 rounded-lg flex flex-col items-center justify-center border border-border overflow-hidden">
+                {product.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={product.imageUrl}
+                    alt={product.designNumber}
+                    className="object-cover h-full w-full"
+                    loading="lazy"
+                    onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  />
+                ) : (
+                  <span className="text-2xl">💎</span>
+                )}
+              </div>
+              
+              {/* Right details */}
+              <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-mono text-[13px] font-bold text-[#C5A059] truncate">{product.designNumber}</p>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{product.sku}</p>
+                  </div>
+                  {userRole === "admin" && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); setEditingProduct(product); }}
+                        className="h-7 w-7 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center hover:bg-emerald-500/20"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); deleteSingle(product.sku); }}
+                        disabled={isDeleting}
+                        className="h-7 w-7 rounded-full bg-destructive/10 text-destructive flex items-center justify-center hover:bg-destructive/20"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="flex items-end justify-between mt-2">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] text-muted-foreground">{product.metalType || "—"} • {product.itemType || product.sku?.substring(0, 4)}</span>
+                    <span className="text-[11px] font-medium text-foreground">G: {product.grossWeight?.toFixed(2) ?? "—"}</span>
+                  </div>
+                  <div className="flex flex-col items-end text-right">
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Net Wt</span>
+                    <span className="text-[14px] font-bold text-foreground">{product.netWeight?.toFixed(3) ?? "—"}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Table (Desktop) ─────────────────────────────────────────────────── */}
+      <div className="hidden md:block bg-card rounded-xl border border-border shadow-sm overflow-hidden pb-4 md:pb-0 mb-20 md:mb-0">
         <div className="overflow-x-auto">
           <Table>
             <TableHeader className="bg-muted/20 border-b border-border">

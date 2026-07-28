@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, HeadObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import path from "path";
 
 // ─── Environment validation ───────────────────────────────────────────────────
@@ -125,4 +125,21 @@ export async function uploadToBackblaze(
   );
 
   return { key: objectKey };
+}
+
+export async function deleteFromBackblaze(objectKey: string): Promise<boolean> {
+  try {
+    await s3Client.send(
+      new DeleteObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: objectKey,
+      })
+    );
+    return true;
+  } catch (err: any) {
+    if (err?.name === "NotFound" || err?.$metadata?.httpStatusCode === 404) {
+      return false;
+    }
+    throw err;
+  }
 }

@@ -11,7 +11,7 @@ function generateQuotationNo(): string {
   return code;
 }
 
-export const GET = withAuth(async (req: NextRequest) => {
+export const GET = withAuth(async (req: NextRequest, { user }: any) => {
   return handleRoute(async () => {
     await connectToDatabase();
 
@@ -45,6 +45,10 @@ export const GET = withAuth(async (req: NextRequest) => {
       }
     }
 
+    if (user.role === "employee") {
+      filter.createdBy = user.id;
+    }
+
     const [quotations, total] = await Promise.all([
       Quotation.find(filter)
         .sort({ createdAt: -1 })
@@ -58,7 +62,7 @@ export const GET = withAuth(async (req: NextRequest) => {
   });
 });
 
-export const POST = withAuth(async (req: NextRequest) => {
+export const POST = withAuth(async (req: NextRequest, { user }: any) => {
   return handleRoute(async () => {
     await connectToDatabase();
 
@@ -104,7 +108,8 @@ export const POST = withAuth(async (req: NextRequest) => {
       lineItems,
       totalGrossWeight,
       totalNetWeight,
-      totalItems: lineItems.length,
+      totalItems:    lineItems.length,
+      createdBy:     user.id,
     });
 
     return NextResponse.json({ quotation, quotationNo }, { status: 201 });

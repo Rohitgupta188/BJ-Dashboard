@@ -24,10 +24,7 @@ export const GET = withAuth(async (request: NextRequest) => {
     };
 
     if (search) {
-      filter.$or = [
-        { designNumber: { $regex: search, $options: "i" } },
-        { sku: { $regex: search, $options: "i" } },
-      ];
+      filter.designNumber = { $regex: search, $options: "i" };
     }
     
     if (itemStatus) {

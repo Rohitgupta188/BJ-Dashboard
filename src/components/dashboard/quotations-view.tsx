@@ -3,8 +3,9 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
   FileText, Layers, Grid, Search,
-  RotateCcw, Eye, Download, Trash2,
-  AlertCircle, ChevronLeft, ChevronRight, Truck, Send
+  RotateCcw, Eye, Download, Trash2, Scale, CheckCircle2,
+  AlertCircle, ChevronLeft, ChevronRight, Truck, Send,
+  Home, User, ScanBarcode, ScanLine, ShoppingCart, Filter
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -59,14 +60,14 @@ export default function QuotationsView() {
     return `${d.getFullYear()}-${mm}-${dd}`;
   };
 
-  const [search, setSearch]       = useState("");
+  const [search, setSearch] = useState("");
   const [startDate, setStartDate] = useState(formatDateForInput(initStartDate));
-  const [endDate, setEndDate]     = useState(formatDateForInput(initEndDate));
+  const [endDate, setEndDate] = useState(formatDateForInput(initEndDate));
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [loading, setLoading]     = useState(true);
+  const [loading, setLoading] = useState(true);
   const [isRefetching, setIsRefetching] = useState(false);
-  const [error, setError]         = useState<string | null>(null);
-  const [selected, setSelected]   = useState<Set<string>>(new Set());
+  const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [viewingQuotation, setViewingQuotation] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -83,7 +84,7 @@ export default function QuotationsView() {
   const fetchQuotations = useCallback(async () => {
     if (quotations.length === 0) setLoading(true);
     else setIsRefetching(true);
-    
+
     setError(null);
     try {
       const params = new URLSearchParams({
@@ -179,6 +180,29 @@ export default function QuotationsView() {
     }
   };
 
+  const handleSingleDelete = async (id: string) => {
+    if (!confirm(`Are you sure you want to delete this quotation?`)) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/quotations/bulk-delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [id] })
+      });
+      if (res.ok) {
+        fetchQuotations();
+      } else {
+        const err = await res.json();
+        alert(err.error || "Failed to delete.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error deleting quotation.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const toggleDispatch = async (quotationNo: string, currentStatus: boolean) => {
     try {
       setQuotations(prev => prev.map(q => q.quotationNo === quotationNo ? { ...q, isDispatched: !currentStatus } : q));
@@ -195,14 +219,14 @@ export default function QuotationsView() {
 
   // Stats derived from current page (summary)
   const totalGross = quotations.reduce((s, q) => s + (q.totalGrossWeight ?? 0), 0);
-  const totalNet   = quotations.reduce((s, q) => s + (q.totalNetWeight   ?? 0), 0);
+  const totalNet = quotations.reduce((s, q) => s + (q.totalNetWeight ?? 0), 0);
   const dispatchedCount = quotations.filter(q => q.isDispatched).length;
   const dispatchedPercent = quotations.length > 0 ? ((dispatchedCount / quotations.length) * 100).toFixed(2) : "0.00";
 
   // Selection
   const allSelected = quotations.length > 0 && quotations.every(q => selected.has(q._id));
-  const toggleAll  = () => setSelected(allSelected ? new Set() : new Set(quotations.map(q => q._id)));
-  const toggleOne  = (id: string) => setSelected(prev => {
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(quotations.map(q => q._id)));
+  const toggleOne = (id: string) => setSelected(prev => {
     const next = new Set(prev);
     next.has(id) ? next.delete(id) : next.add(id);
     return next;
@@ -212,232 +236,335 @@ export default function QuotationsView() {
     <>
       {/* ── Quotations ────────────────────────────────────────────────────── */}
       {/* Stats cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 text-foreground mb-6">
-            <StatCard
-              title="Gross Weight (Page)"
-              value={`${totalGross.toFixed(2)} g`}
-              icon={<FileText className="h-5 w-5" />}
-            />
-            <StatCard
-              title="Net Gold Weight (Page)"
-              value={`${totalNet.toFixed(2)} g`}
-              icon={<Layers className="h-5 w-5" />}
-            />
-            <StatCard
-              title="Total Quotations"
-              value={`${total}`}
-              icon={<Grid className="h-5 w-5" />}
-            />
-            <StatCard
-              title="Dispatched"
-              value={`${dispatchedPercent}%`}
-              icon={<Truck className="h-5 w-5" />}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-6 text-foreground mb-6">
+        <StatCard
+          title="Gross Weight"
+          value={`${totalGross.toFixed(2)} g`}
+          icon={<Scale className="h-5 w-5" />}
+        />
+        <StatCard
+          title="Net Weight" 
+          value={`${totalNet.toFixed(2)} g`}
+          icon={<Scale className="h-5 w-5" />}
+        />
+        <StatCard
+          title="Total Quotations"
+          value={`${total}`}
+          icon={<Grid className="h-5 w-5" />}
+        />
+        <StatCard
+          title="Dispatched"
+          value={`${dispatchedPercent}%`}
+          icon={<Truck className="h-5 w-5" />}
+        />
+      </div>
+
+      {/* Toolbar - Responsive */}
+      <div className="bg-card p-4 rounded-xl border border-border shadow-sm flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-3 top-2.5 text-muted-foreground h-4 w-4" />
+            <Input
+              placeholder="Search by quotation no. or client…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="pl-9 h-9 text-xs bg-background/50 border-border focus-visible:ring-primary text-foreground"
             />
           </div>
 
-          {/* Toolbar */}
-          <div className="bg-card p-4 rounded-xl border border-border shadow-sm flex flex-col lg:flex-row gap-3 items-start lg:items-center justify-between mb-4">
-            <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
-              <div className="relative w-full sm:w-64">
-                <Search className="absolute left-3 top-2.5 text-muted-foreground h-4 w-4" />
-                <Input
-                  placeholder="Search by quotation no. or client…"
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  className="pl-9 h-9 text-xs bg-background/50 border-border focus-visible:ring-primary text-foreground"
-                />
-              </div>
-              
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <Input 
-                  type="date"
-                  value={startDate}
-                  onChange={e => setStartDate(e.target.value)}
-                  className="h-9 text-xs w-32.5 bg-background/50 text-muted-foreground"
-                />
-                <span className="text-muted-foreground text-xs">—</span>
-                <Input 
-                  type="date"
-                  value={endDate}
-                  onChange={e => setEndDate(e.target.value)}
-                  className="h-9 text-xs w-32.5 bg-background/50 text-muted-foreground"
-                />
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-              <Button
-                variant="outline" size="icon"
-                onClick={handleBulkDownload}
-                disabled={selected.size === 0 || downloading}
-                className="h-9 w-9 border-border text-muted-foreground hover:bg-muted hover:text-foreground transition rounded-full"
-                title="Download Selected PDFs"
-              >
-                <Download className={`h-4 w-4 ${downloading ? "animate-bounce" : ""}`} />
-              </Button>
-              <Button
-                variant="outline" size="icon"
-                onClick={handleBulkDelete}
-                disabled={selected.size === 0 || deleting}
-                className="h-9 w-9 border-destructive/20 text-destructive/60 hover:bg-destructive/10 hover:text-destructive transition rounded-full mr-2"
-                title="Delete Selected"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="outline" size="sm"
-                onClick={fetchQuotations}
-                className="h-9 gap-1.5 text-xs border-primary/50 text-primary hover:bg-primary/10 hover:border-primary transition"
-              >
-                <RotateCcw className={`h-3.5 w-3.5 ${isRefetching || loading ? "animate-spin" : ""}`} />
-                Refresh
-              </Button>
-            </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <Input
+              type="date"
+              value={startDate}
+              onChange={e => setStartDate(e.target.value)}
+              className="h-9 text-xs w-32.5 bg-background/50 text-muted-foreground"
+            />
+            <span className="text-muted-foreground text-xs">—</span>
+            <Input
+              type="date"
+              value={endDate}
+              onChange={e => setEndDate(e.target.value)}
+              className="h-9 text-xs w-32.5 bg-background/50 text-muted-foreground"
+            />
           </div>
+        </div>
 
-          {/* Error */}
-          {error && (
-            <div className="flex items-center gap-3 bg-destructive/10 border border-destructive/30 rounded-xl p-4 text-sm text-destructive mb-4">
-              <AlertCircle className="h-5 w-5 shrink-0" />
-              <p>{error}</p>
-              <Button size="sm" variant="outline" onClick={fetchQuotations} className="ml-auto border-destructive/40 text-destructive hover:bg-destructive/10">Retry</Button>
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+          <Button
+            variant="outline" size="icon"
+            onClick={handleBulkDownload}
+            disabled={selected.size === 0 || downloading}
+            className="h-9 w-9 border-[#C5A059]/40 text-[#C5A059] hover:bg-[#C5A059]/10 hover:text-[#C5A059] transition rounded-full shadow-sm"
+            title="Download Selected PDFs"
+          >
+            <Download className={`h-4 w-4 ${downloading ? "animate-bounce" : ""}`} />
+          </Button>
+          <Button
+            variant="outline" size="icon"
+            onClick={handleBulkDelete}
+            disabled={selected.size === 0 || deleting}
+            className="h-9 w-9 border-destructive/20 text-destructive/60 hover:bg-destructive/10 hover:text-destructive transition rounded-full"
+            title="Delete Selected"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline" size="sm"
+            onClick={fetchQuotations}
+            className="h-9 gap-1.5 text-xs border-primary/50 text-primary hover:bg-primary/10 hover:border-primary transition"
+          >
+            <RotateCcw className={`h-3.5 w-3.5 ${isRefetching || loading ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+        </div>
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div className="flex items-center gap-3 bg-destructive/10 border border-destructive/30 rounded-xl p-4 text-sm text-destructive mb-4">
+          <AlertCircle className="h-5 w-5 shrink-0" />
+          <p>{error}</p>
+          <Button size="sm" variant="outline" onClick={fetchQuotations} className="ml-auto border-destructive/40 text-destructive hover:bg-destructive/10">Retry</Button>
+        </div>
+      )}
+
+      {/* Table (Desktop) / Cards (Mobile) */}
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-3 lg:hidden">
+          <h2 className="text-sm font-semibold tracking-wide text-muted-foreground">RECENT QUOTATIONS</h2>
+          {/* Select All on mobile */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Select All</span>
+            <Checkbox
+              checked={allSelected}
+              onCheckedChange={toggleAll}
+              className="border-primary/40 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+            />
+          </div>
+        </div>
+        
+        {/* Mobile Cards */}
+        <div className="lg:hidden flex flex-col gap-3 pb-24">
+          {loading && Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="bg-card p-4 rounded-xl border border-border flex gap-4 animate-pulse">
+              <div className="h-12 w-12 bg-muted rounded-lg" />
+              <div className="flex-1 space-y-2 py-1">
+                <div className="h-4 bg-muted rounded w-1/3" />
+                <div className="h-3 bg-muted rounded w-1/2" />
+              </div>
+            </div>
+          ))}
+
+          {!loading && quotations.length === 0 && (
+            <div className="bg-card rounded-xl border border-border p-8 text-center text-muted-foreground">
+              <FileText className="h-10 w-10 mx-auto text-muted-foreground/30 mb-3" />
+              <p>No quotations found.</p>
             </div>
           )}
 
-          {/* Table */}
-          <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden mb-4">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader className="bg-muted/20 border-b border-border">
-                  <TableRow className="hover:bg-transparent border-border">
-                    <TableHead className="w-12 p-2">
-                      <Checkbox
-                        checked={allSelected}
-                        onCheckedChange={toggleAll}
-                        className="border-primary/40 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                      />
-                    </TableHead>
-                    <TableHead className="font-semibold uppercase tracking-wider text-primary text-sm py-2">Q.NO</TableHead>
-                    <TableHead className="font-semibold uppercase tracking-wider text-primary text-sm py-2">DATE</TableHead>
-                    <TableHead className="font-semibold uppercase tracking-wider text-primary text-sm py-2">CLIENT NAME</TableHead>
-                    <TableHead className="font-semibold uppercase tracking-wider text-foreground text-sm py-2 text-right">GR WT</TableHead>
-                    <TableHead className="font-semibold uppercase tracking-wider text-foreground text-sm py-2 text-right">NET WT</TableHead>
-                    <TableHead className="font-semibold uppercase tracking-wider text-foreground text-sm py-2 text-center">ACTION</TableHead>
-                    <TableHead className="font-semibold uppercase tracking-wider text-foreground text-sm py-2 text-center">DISPATCH</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody className={`text-muted-foreground border-border transition-opacity duration-300 ${isRefetching ? "opacity-50 pointer-events-none" : ""}`}>
-                  {/* Loading skeleton */}
-                  {loading && Array.from({ length: 6 }).map((_, i) => (
-                    <TableRow key={i} className="border-border animate-pulse">
-                      <TableCell className="p-2"><div className="h-4 w-4 bg-muted rounded" /></TableCell>
-                      <TableCell><div className="h-3 w-20 bg-muted rounded font-mono" /></TableCell>
-                      <TableCell><div className="h-3 w-32 bg-muted rounded" /></TableCell>
-                      <TableCell><div className="h-3 w-40 bg-muted rounded" /></TableCell>
-                      <TableCell><div className="h-3 w-16 bg-muted rounded ml-auto" /></TableCell>
-                      <TableCell><div className="h-3 w-16 bg-muted rounded ml-auto" /></TableCell>
-                      <TableCell><div className="h-3 w-8 bg-muted rounded mx-auto" /></TableCell>
-                      <TableCell><div className="h-7 w-8 bg-muted rounded mx-auto" /></TableCell>
-                    </TableRow>
-                  ))}
-
-                  {/* Real rows */}
-                  {!loading && quotations.map((q, i) => (
-                    <TableRow
-                      key={q._id}
-                      className={`border-border transition-all ${selected.has(q._id) ? "bg-primary/5" : "hover:bg-accent/20"}`}
+          {!loading && quotations.map(product => {
+            const isSelected = selected.has(product._id);
+            return (
+              <div 
+                key={product._id} 
+                onClick={() => toggleOne(product._id)}
+                className={`bg-card rounded-xl border overflow-hidden p-3 flex gap-3 items-center shadow-sm transition-all ${isSelected ? "border-[#C5A059] ring-1 ring-[#C5A059]/20 bg-[#C5A059]/5" : "border-border"}`}
+              >
+                {/* Left icon/avatar */}
+                <div className="h-12 w-12 shrink-0 bg-muted/30 rounded-lg flex items-center justify-center border border-border">
+                  <FileText className="h-5 w-5 text-muted-foreground/50" />
+                </div>
+                
+                {/* Middle details */}
+                <div className="flex-1 min-w-0 flex flex-col justify-center">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-semibold text-[#C5A059] truncate pr-2">{product.quotationNo}</span>
+                    <div className="flex items-center gap-1.5 ml-auto">
+                    {/* View Button */}
+                    <button 
+                      onClick={() => setViewingQuotation(product.quotationNo)}
+                      className="h-8 w-8 rounded-full border border-border bg-card flex items-center justify-center text-muted-foreground hover:text-primary transition-colors"
                     >
-                      <TableCell className="p-2">
-                        <Checkbox
-                          checked={selected.has(q._id)}
-                          onCheckedChange={() => toggleOne(q._id)}
-                          className="border-primary/30 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                        />
-                      </TableCell>
-                      <TableCell className="font-mono text-sm font-bold text-primary tracking-wide">{q.quotationNo}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground font-mono whitespace-nowrap">{fmt(q.createdAt)}</TableCell>
-                      <TableCell>
-                        <p className="text-sm font-semibold text-foreground truncate max-w-45">{q.companyName}</p>
-                        {q.contactName && <p className="text-xs text-muted-foreground mt-0.5">{q.contactName}</p>}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm font-medium">{(q.totalGrossWeight ?? 0).toFixed(2)}</TableCell>
-                      <TableCell className="text-right font-mono text-sm font-medium">{(q.totalNetWeight ?? 0).toFixed(2)}</TableCell>
-                      <TableCell className="text-center">
-                        <Button
-                          variant="ghost" size="icon"
-                          onClick={() => setViewingQuotation(q.quotationNo)}
-                          className="h-7 w-7 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10 rounded-full transition-all"
-                          title={`View ${q.quotationNo}`}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex items-center justify-center gap-2 cursor-pointer" onClick={() => toggleDispatch(q.quotationNo, q.isDispatched)}>
-                          <Send className={`h-4 w-4 ${q.isDispatched ? "text-emerald-500" : "text-emerald-500/50"}`} />
-                          <div className={`h-2 w-2 rounded-full ${q.isDispatched ? "bg-emerald-500" : "bg-destructive"}`} />
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-
-                  {/* Empty */}
-                  {!loading && !error && quotations.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={8} className="py-16 text-center">
-                        <div className="flex flex-col items-center gap-3">
-                          <div className="w-14 h-14 bg-primary/10 rounded-2xl border border-primary/20 flex items-center justify-center">
-                            <FileText className="h-7 w-7 text-primary/50" />
-                          </div>
-                          <p className="text-sm font-medium text-foreground">No quotations yet</p>
-                          <p className="text-xs text-muted-foreground">
-                            {debouncedSearch ? `No results for "${debouncedSearch}"` : "Export your first quotation from the Sales tab"}
-                          </p>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex flex-col sm:flex-row items-center justify-between bg-card px-4 py-3 border border-border rounded-xl shadow-sm gap-3">
-              <p className="text-xs text-muted-foreground">
-                Page <span className="text-foreground font-semibold">{page}</span> of{" "}
-                <span className="text-foreground font-semibold">{totalPages}</span>
-                {total > 0 && <span> · {total.toLocaleString()} total</span>}
-              </p>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline" size="sm"
-                  onClick={() => setPage(p => Math.max(p - 1, 1))}
-                  disabled={page === 1 || loading}
-                  className="h-8 gap-1 text-xs border-border text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-40"
-                >
-                  <ChevronLeft className="h-3.5 w-3.5" /> Prev
-                </Button>
-                <Button
-                  variant="outline" size="sm"
-                  onClick={() => setPage(p => Math.min(p + 1, totalPages))}
-                  disabled={page === totalPages || loading}
-                  className="h-8 gap-1 text-xs border-border text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-40"
-                >
-                  Next <ChevronRight className="h-3.5 w-3.5" />
-                </Button>
+                      <Eye className="h-3.5 w-3.5" />
+                    </button>
+                    {/* Dispatch Button */}
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleDispatch(product.quotationNo, product.isDispatched);
+                      }}
+                      className={`h-8 w-8 rounded-full border flex items-center justify-center transition-colors ${product.isDispatched ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-500' : 'border-border bg-card text-muted-foreground hover:text-primary'}`}
+                    >
+                      {product.isDispatched ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Truck className="h-3.5 w-3.5" />}
+                    </button>
+                    {/* Delete Button */}
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSingleDelete(product._id);
+                      }}
+                      className="h-8 w-8 rounded-full border border-border bg-card flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <div className="flex flex-col">
+                      <span className="text-[13px] text-foreground font-medium truncate">{product.companyName}</span>
+                      <span className="text-[11px] text-muted-foreground">G {product.totalGrossWeight.toFixed(3)} • N {product.totalNetWeight.toFixed(3)}</span>
+                    </div>
+                    
+                    <div className="flex flex-col items-end">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <div className={`h-1.5 w-1.5 rounded-full ${product.isDispatched ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                        <span className="text-[11px] text-muted-foreground">{product.totalItems} pcs</span>
+                      </div>
+                      <span className="text-[13px] font-semibold text-foreground">{product.totalGrossWeight.toFixed(3)} g</span>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })}
+        </div>
 
-          {viewingQuotation && (
-            <QuotationDetailModal 
-              quotationNo={viewingQuotation} 
-              onClose={() => setViewingQuotation(null)}
-              onUpdated={fetchQuotations}
-            />
-          )}
+        {/* Desktop Table */}
+        <div className="hidden lg:block bg-card rounded-xl border border-border shadow-sm overflow-hidden mb-4">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader className="bg-muted/20 border-b border-border">
+              <TableRow className="hover:bg-transparent border-border">
+                <TableHead className="w-12 p-2">
+                  <Checkbox
+                    checked={allSelected}
+                    onCheckedChange={toggleAll}
+                    className="border-primary/40 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                  />
+                </TableHead>
+                <TableHead className="font-semibold uppercase tracking-wider text-primary text-sm py-2">Q.NO</TableHead>
+                <TableHead className="font-semibold uppercase tracking-wider text-primary text-sm py-2">DATE</TableHead>
+                <TableHead className="font-semibold uppercase tracking-wider text-primary text-sm py-2">CLIENT NAME</TableHead>
+                <TableHead className="font-semibold uppercase tracking-wider text-foreground text-sm py-2 text-right">GR WT</TableHead>
+                <TableHead className="font-semibold uppercase tracking-wider text-foreground text-sm py-2 text-right">NET WT</TableHead>
+                <TableHead className="font-semibold uppercase tracking-wider text-foreground text-sm py-2 text-center">ACTION</TableHead>
+                <TableHead className="font-semibold uppercase tracking-wider text-foreground text-sm py-2 text-center">DISPATCH</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody className={`text-muted-foreground border-border transition-opacity duration-300 ${isRefetching ? "opacity-50 pointer-events-none" : ""}`}>
+              {/* Loading skeleton */}
+              {loading && Array.from({ length: 6 }).map((_, i) => (
+                <TableRow key={i} className="border-border animate-pulse">
+                  <TableCell className="p-2"><div className="h-4 w-4 bg-muted rounded" /></TableCell>
+                  <TableCell><div className="h-3 w-20 bg-muted rounded font-mono" /></TableCell>
+                  <TableCell><div className="h-3 w-32 bg-muted rounded" /></TableCell>
+                  <TableCell><div className="h-3 w-40 bg-muted rounded" /></TableCell>
+                  <TableCell><div className="h-3 w-16 bg-muted rounded ml-auto" /></TableCell>
+                  <TableCell><div className="h-3 w-16 bg-muted rounded ml-auto" /></TableCell>
+                  <TableCell><div className="h-3 w-8 bg-muted rounded mx-auto" /></TableCell>
+                  <TableCell><div className="h-7 w-8 bg-muted rounded mx-auto" /></TableCell>
+                </TableRow>
+              ))}
+
+              {/* Real rows */}
+              {!loading && quotations.map((q, i) => (
+                <TableRow
+                  key={q._id}
+                  className={`border-border transition-all ${selected.has(q._id) ? "bg-primary/5" : "hover:bg-accent/20"}`}
+                >
+                  <TableCell className="p-2">
+                    <Checkbox
+                      checked={selected.has(q._id)}
+                      onCheckedChange={() => toggleOne(q._id)}
+                      className="border-primary/30 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                    />
+                  </TableCell>
+                  <TableCell className="font-mono text-sm font-bold text-primary tracking-wide">{q.quotationNo}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground font-mono whitespace-nowrap">{fmt(q.createdAt)}</TableCell>
+                  <TableCell>
+                    <p className="text-sm font-semibold text-foreground truncate max-w-45">{q.companyName}</p>
+                    {q.contactName && <p className="text-xs text-muted-foreground mt-0.5">{q.contactName}</p>}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm font-medium">{(q.totalGrossWeight ?? 0).toFixed(2)}</TableCell>
+                  <TableCell className="text-right font-mono text-sm font-medium">{(q.totalNetWeight ?? 0).toFixed(2)}</TableCell>
+                  <TableCell className="text-center">
+                    <Button
+                      variant="ghost" size="icon"
+                      onClick={() => setViewingQuotation(q.quotationNo)}
+                      className="h-7 w-7 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10 rounded-full transition-all"
+                      title={`View ${q.quotationNo}`}
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <div className="flex items-center justify-center gap-2 cursor-pointer" onClick={() => toggleDispatch(q.quotationNo, q.isDispatched)}>
+                      <Send className={`h-4 w-4 ${q.isDispatched ? "text-emerald-500" : "text-emerald-500/50"}`} />
+                      <div className={`h-2 w-2 rounded-full ${q.isDispatched ? "bg-emerald-500" : "bg-destructive"}`} />
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+
+              {/* Empty */}
+              {!loading && !error && quotations.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={8} className="py-16 text-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-14 h-14 bg-primary/10 rounded-2xl border border-primary/20 flex items-center justify-center">
+                        <FileText className="h-7 w-7 text-primary/50" />
+                      </div>
+                      <p className="text-sm font-medium text-foreground">No quotations yet</p>
+                      <p className="text-xs text-muted-foreground">
+                        {debouncedSearch ? `No results for "${debouncedSearch}"` : "Export your first quotation from the Sales tab"}
+                      </p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+      </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between bg-card px-4 py-3 border border-border rounded-xl shadow-sm gap-3">
+          <p className="text-xs text-muted-foreground">
+            Page <span className="text-foreground font-semibold">{page}</span> of{" "}
+            <span className="text-foreground font-semibold">{totalPages}</span>
+            {total > 0 && <span> · {total.toLocaleString()} total</span>}
+          </p>
+          <div className="flex items-center gap-2 w-full lg:w-auto order-3 lg:order-0 mt-4 lg:mt-0 justify-center">
+            <Button
+              variant="outline" size="sm"
+              onClick={() => setPage(p => Math.max(p - 1, 1))}
+              disabled={page === 1 || loading}
+              className="h-8 gap-1 text-xs border-border text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-40"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" /> Prev
+            </Button>
+            <Button
+              variant="outline" size="sm"
+              onClick={() => setPage(p => Math.min(p + 1, totalPages))}
+              disabled={page === totalPages || loading}
+              className="h-8 gap-1 text-xs border-border text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-40"
+            >
+              Next <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {viewingQuotation && (
+        <QuotationDetailModal
+          quotationNo={viewingQuotation}
+          onClose={() => setViewingQuotation(null)}
+          onUpdated={fetchQuotations}
+        />
+      )}
     </>
   );
 }
@@ -445,14 +572,19 @@ export default function QuotationsView() {
 // ── Sub-components ─────────────────────────────────────────────────────────────
 function StatCard({ title, value, icon }: { title: string; value: string; icon: React.ReactNode }) {
   return (
-    <Card className="shadow-[0_8px_30px_rgba(0,0,0,0.12)] border-border bg-card transition-all hover:border-primary/30 group">
-      <CardContent className="p-5 flex items-center justify-between">
-        <div>
-          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{title}</p>
-          <h3 className="text-xl font-mono font-semibold text-foreground mt-1.5 tracking-tight group-hover:text-primary transition-colors">{value}</h3>
-        </div>
-        <div className="w-11 h-11 bg-primary/10 rounded-xl flex items-center justify-center text-primary border border-primary/20">
+    <Card className="shadow-[0_8px_30px_rgba(0,0,0,0.06)] border-border/50 bg-card transition-all hover:border-primary/30 group rounded-[16px] lg:rounded-xl">
+      <CardContent className="p-3.5 lg:p-5 flex flex-row items-center gap-3 lg:gap-4">
+        <div className="w-10 h-10 lg:w-12 lg:h-12 shrink-0 bg-[#C5A059]/10 rounded-xl flex items-center justify-center text-[#C5A059] border border-[#C5A059]/20">
           {icon}
+        </div>
+        <div className="flex-1 min-w-0 flex flex-col">
+          <p className="text-[9px] lg:text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider truncate">{title}</p>
+          <div className="flex items-baseline gap-1 mt-0.5">
+            <h3 className="text-lg lg:text-2xl font-mono font-semibold text-foreground tracking-tight group-hover:text-primary transition-colors">
+              {value.replace(/[^\d.]/g, '')}
+            </h3>
+            <span className="text-[10px] lg:text-xs text-muted-foreground font-medium">{value.replace(/[\d.]/g, '').trim()}</span>
+          </div>
         </div>
       </CardContent>
     </Card>
