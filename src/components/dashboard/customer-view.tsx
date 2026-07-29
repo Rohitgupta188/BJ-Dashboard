@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { Pencil, Search, Trash2, X } from "lucide-react";
+import { Pencil, Search, Trash2, X, Phone, Mail, MapPin } from "lucide-react";
 import { customerSchema } from "@/lib/validation/customer.schema";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
@@ -166,7 +166,8 @@ export default function CustomerView() {
         </Button>
       </div>
 
-      <div className="bg-card rounded-xl border border-border shadow-[0_8px_30px_rgba(0,0,0,0.15)] overflow-hidden text-foreground mt-6">
+      {/* ── Desktop Table ──────────────────────────────────────────────────────── */}
+      <div className="hidden sm:block bg-card rounded-xl border border-border shadow-[0_8px_30px_rgba(0,0,0,0.15)] overflow-hidden text-foreground mt-6">
         <Table>
           <TableHeader className="bg-muted/20 border-b border-border">
             <TableRow className="hover:bg-transparent border-border">
@@ -253,19 +254,75 @@ export default function CustomerView() {
         </Table>
       </div>
 
+      {/* ── Mobile Cards ───────────────────────────────────────────────────────── */}
+      <div className="sm:hidden flex flex-col gap-3 mt-6 pb-2">
+        {loading && <p className="text-center py-10 text-xs text-muted-foreground">Loading customers…</p>}
+        {!loading && error && <p className="text-center py-10 text-xs text-destructive font-semibold">{error}</p>}
+        {!loading && !error && customers.length === 0 && (
+          <p className="text-center py-10 text-xs text-muted-foreground">No customers yet. Add your first one above.</p>
+        )}
+        
+        {!loading && !error && customers.map((customer) => (
+          <div key={customer._id} className="bg-card rounded-[16px] border border-border p-4 flex flex-col gap-3 shadow-sm relative transition-all duration-300 hover:border-primary/30">
+            <div className="flex items-center gap-3 pr-12">
+              <div className="h-11 w-11 shrink-0 rounded-full bg-primary/10 flex items-center justify-center text-primary font-serif font-bold tracking-widest border border-primary/20 shadow-inner">
+                {customer.name.substring(0, 2).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <h3 className="font-serif font-bold text-sm text-foreground truncate">{customer.name}</h3>
+                <p className="text-[11px] text-muted-foreground truncate">{customer.contactName}</p>
+              </div>
+            </div>
+            
+            <div className="flex flex-col gap-1.5 text-[11px] text-muted-foreground bg-muted/10 p-3 rounded-xl border border-border/50">
+              <div className="flex items-center gap-2 font-mono">
+                <Phone className="h-3 w-3 shrink-0 text-primary/70" /> 
+                {customer.phone}
+              </div>
+              {customer.email && (
+                <div className="flex items-center gap-2">
+                  <Mail className="h-3 w-3 shrink-0 text-primary/70" /> 
+                  <span className="truncate">{customer.email}</span>
+                </div>
+              )}
+              <div className="flex items-start gap-2">
+                <MapPin className="h-3 w-3 shrink-0 text-primary/70 mt-0.5" /> 
+                <span className="leading-relaxed">{customer.address}</span>
+              </div>
+            </div>
+            
+            <div className="absolute top-4 right-4 flex gap-1.5">
+              <button 
+                onClick={() => openEditModal(customer)} 
+                className="h-7 w-7 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center hover:bg-emerald-500/20 transition-colors"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+              <button 
+                onClick={() => handleDelete(customer._id)} 
+                className="h-7 w-7 rounded-full bg-destructive/10 text-destructive flex items-center justify-center hover:bg-destructive/20 transition-colors"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {totalPages > 1 && !error && (
-        <div className="flex items-center justify-between bg-card px-5 py-3.5 border border-border rounded-xl shadow-[0_4px_16px_rgba(0,0,0,0.12)] text-xs text-muted-foreground mt-6">
-          <p className="font-medium">
-            Page <span className="text-foreground font-semibold">{page}</span> of <span className="text-foreground font-semibold">{totalPages}</span>
-            {total > 0 && <span> · {total} total</span>}
+        <div className="flex flex-col sm:flex-row items-center justify-between bg-card px-5 py-3.5 border border-border rounded-xl shadow-[0_4px_16px_rgba(0,0,0,0.12)] text-xs text-muted-foreground mt-6 gap-3">
+          <p className="font-medium text-center sm:text-left w-full sm:w-auto">
+            Page <span className="font-bold text-foreground">{page}</span> of{" "}
+            <span className="font-bold text-foreground">{totalPages}</span>
+            <span className="opacity-70 ml-1.5 hidden sm:inline-block">({total.toLocaleString()} total customers)</span>
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-center gap-1.5 w-full sm:w-auto">
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page <= 1 || loading}
-              className="h-8 gap-1 text-xs border-border text-muted-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/30 disabled:opacity-40 transition-all"
+              onClick={() => setPage((p) => Math.max(p - 1, 1))}
+              disabled={page === 1}
+              className="h-8 px-2.5 text-xs text-muted-foreground border-border hover:bg-primary/10 hover:text-primary transition-colors disabled:opacity-40"
             >
               Prev
             </Button>

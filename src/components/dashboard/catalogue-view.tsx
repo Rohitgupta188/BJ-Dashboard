@@ -15,7 +15,7 @@ function StaticQR({ sku }: { sku: string }) {
       .then(setSrc)
       .catch(console.error);
   }, [sku]);
-  
+
   if (!src) return <div className="w-12.5 h-12.5 bg-muted/20 rounded-md animate-pulse" />;
   return <img src={src} alt={`QR for ${sku}`} className="w-12.5 h-12.5 rounded-md shadow-sm border border-border" />;
 }
@@ -72,7 +72,7 @@ interface CatalogueViewProps {
 // ─── Main Component ────────────────────────────────────────────────────────────
 export default function CatalogueView({ cart = [], onToggleCart }: CatalogueViewProps) {
   console.log("Catalogue view Props", cart);
-  
+
   const [items, setItems] = useState<CatalogueItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -200,8 +200,8 @@ export default function CatalogueView({ cart = [], onToggleCart }: CatalogueView
         {/* Real product cards */}
         {!isLoading && items.map((product, idx) => {
           const isInCart = cart.some((item) => item.designNumber === product.designNumber);
-          console.log(" isInCart: ",isInCart);
-          
+          console.log(" isInCart: ", isInCart);
+
           return (
             <Card
               key={`${product.designNumber}-${idx}`}
@@ -216,11 +216,10 @@ export default function CatalogueView({ cart = [], onToggleCart }: CatalogueView
                     e.stopPropagation();
                     onToggleCart(product);
                   }}
-                  className={`absolute bottom-3 left-3 z-10 p-2 rounded-lg border transition-all duration-300 shadow-md ${
-                    isInCart
+                  className={`absolute bottom-3 left-3 z-10 p-2 rounded-lg border transition-all duration-300 shadow-md ${isInCart
                       ? "bg-primary border-primary text-primary-foreground shadow-[0_0_12px_rgba(197,160,89,0.4)] hover:bg-primary/95 hover:scale-105"
                       : "bg-background/80 hover:bg-background border-border text-muted-foreground hover:text-primary hover:scale-115"
-                  }`}
+                    }`}
                   title={isInCart ? "Remove from Cart" : "Add to Cart"}
                 >
                   <ShoppingCart className="h-4 w-4" strokeWidth={2} />
@@ -247,12 +246,12 @@ export default function CatalogueView({ cart = [], onToggleCart }: CatalogueView
               </div>
 
               {/* ── Details ── */}
-              <CardContent className="p-3 text-left flex-1 flex flex-row items-end justify-between relative">
-                <div className="flex flex-col gap-0.5 w-full">
-                  <p className="font-mono text-xs sm:text-sm font-bold uppercase tracking-wider text-foreground truncate pr-1" title={product.designNumber}>
+              <CardContent className="p-3 pb-0 pt-0 text-left flex-1 flex flex-row items-end justify-between relative ">
+                <div className="flex flex-col gap-0.5 flex-1 min-w-0 pr-2">
+                  <p className="font-mono text-xs sm:text-sm font-bold uppercase tracking-wider text-foreground break-all" title={product.designNumber}>
                     {product.designNumber}
                   </p>
-                  <div className="flex flex-col gap-0.5 text-[10px] sm:text-[11px] text-muted-foreground font-medium">
+                  <div className="flex flex-col gap-1.5 text-[10px] sm:text-[11px] text-muted-foreground font-medium mt-2">
                     <span>G.WT: {product.grossWeight}g</span>
                     <span>N.WT: {product.netWeight}g</span>
                   </div>
@@ -282,19 +281,20 @@ export default function CatalogueView({ cart = [], onToggleCart }: CatalogueView
 
       {/* ── PAGINATION ──────────────────────────────────────────────────────── */}
       {totalPages > 1 && !error && (
-        <div className="flex flex-col sm:flex-row items-center justify-between bg-card px-5 py-3.5 border border-border rounded-xl shadow-[0_4px_16px_rgba(0,0,0,0.12)] mt-6 gap-3 text-center sm:text-left">
-          <p className="text-xs text-muted-foreground font-medium">
-            Page <span className="text-foreground font-semibold">{currentPage}</span> of <span className="text-foreground font-semibold">{totalPages}</span>
-            {totalItems > 0 && <span className="whitespace-nowrap"> · {totalItems.toLocaleString()} total</span>}
+        <div className="flex flex-col sm:flex-row items-center justify-between bg-card px-4 py-3 border border-border rounded-xl shadow-sm gap-3 mt-4">
+          <p className="text-xs text-muted-foreground w-full sm:w-auto text-center sm:text-left">
+            Page <span className="text-foreground font-semibold">{currentPage}</span> of{" "}
+            <span className="text-foreground font-semibold">{totalPages}</span>
+            {totalItems > 0 && <span className="hidden sm:inline"> · {totalItems.toLocaleString()} total</span>}
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-center gap-2 w-full sm:w-auto">
             <Button
               variant="outline" size="sm"
               onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
               disabled={currentPage === 1 || isLoading}
-              className="h-8 gap-1 text-xs border-border text-muted-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/30 disabled:opacity-40 transition-all"
+              className="h-8 w-8 sm:w-auto p-0 sm:px-3 gap-1 text-xs border-border text-muted-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/30 disabled:opacity-40"
             >
-              <ChevronLeft className="h-3.5 w-3.5" /> Prev
+              <ChevronLeft className="h-4 w-4 sm:h-3.5 sm:w-3.5" /> <span className="hidden sm:inline">Prev</span>
             </Button>
 
             {/* Page number pills */}
@@ -323,9 +323,9 @@ export default function CatalogueView({ cart = [], onToggleCart }: CatalogueView
               variant="outline" size="sm"
               onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
               disabled={currentPage === totalPages || isLoading}
-              className="h-8 gap-1 text-xs border-border text-muted-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/30 disabled:opacity-40 transition-all"
+              className="h-8 w-8 sm:w-auto p-0 sm:px-3 gap-1 text-xs border-border text-muted-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/30 disabled:opacity-40"
             >
-              Next <ChevronRight className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Next</span> <ChevronRight className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
             </Button>
           </div>
         </div>

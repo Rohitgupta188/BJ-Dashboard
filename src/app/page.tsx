@@ -32,6 +32,7 @@ function DashboardContent() {
   const [user, setUser]             = useState<UserInfo | null>(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);  // ← mobile sidebar
+  const [touchStart, setTouchStart] = useState<number | null>(null);
 
   // Close sidebar when tab changes (mobile UX)
   useEffect(() => {
@@ -110,6 +111,27 @@ function DashboardContent() {
     );
   };
 
+  // ── Swipe to open sidebar ─────────────────────────────────────────────────
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStart === null) return;
+    const currentTouch = e.targetTouches[0].clientX;
+    const diff = currentTouch - touchStart;
+
+    // If swiped right from the left edge (started within 40px of left edge)
+    if (diff > 50 && touchStart < 40) {
+      setIsSidebarOpen(true);
+      setTouchStart(null); // prevent multiple triggers
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setTouchStart(null);
+  };
+
   const renderActiveView = () => {
     switch (activeTab) {
       case "Products":
@@ -143,8 +165,13 @@ function DashboardContent() {
 
   return (
     <TooltipProvider>
-      <div className="flex h-screen bg-background text-foreground font-sans overflow-hidden">
-        {/* Sidebar (hidden on mobile until hamburger tap) */}
+      <div 
+        className="flex h-screen bg-background text-foreground font-sans overflow-hidden"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        {/* Sidebar (hidden on mobile until hamburger tap or swipe) */}
         <Sidebar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
@@ -164,13 +191,13 @@ function DashboardContent() {
             onMenuClick={() => setIsSidebarOpen(true)}
           />
 
-          <main className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
+          <main className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6 pb-24 lg:pb-6">
             {renderActiveView()}
           </main>
         </div>
 
         {/* ── Global Mobile Bottom Navigation ── */}
-        <div className="fixed bottom-0 left-0 right-0 z-40 lg:hidden bg-card/90 backdrop-blur-2xl border-t border-border shadow-[0_-10px_40px_rgba(0,0,0,0.08)] px-6 py-2 pb-safe">
+        <div className="fixed -bottom-1.5 left-0 right-0 z-40 lg:hidden bg-card/95 backdrop-blur-2xl border-t border-border shadow-[0_-10px_40px_rgba(0,0,0,0.08)] px-2 ">
           <div className="flex items-center justify-between max-w-md mx-auto">
             <button onClick={() => setActiveTab("Quotations")} className={`flex flex-col items-center justify-center gap-1 p-2 min-w-16 transition-colors group ${activeTab === "Quotations" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
               <Home className="h-5.5 w-5.5 group-hover:scale-110 transition-transform" strokeWidth={2.5} />

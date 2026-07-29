@@ -46,7 +46,7 @@ export const GET = withAuth(async (req: NextRequest, { user }: any) => {
     }
 
     if (user.role === "employee") {
-      filter.createdBy = user.id;
+      filter.createdBy = user.sub;
     }
 
     const [quotations, total] = await Promise.all([
@@ -109,7 +109,7 @@ export const POST = withAuth(async (req: NextRequest, { user }: any) => {
       totalGrossWeight,
       totalNetWeight,
       totalItems:    lineItems.length,
-      createdBy:     user.id,
+      createdBy:     user.sub,
     });
 
     return NextResponse.json({ quotation, quotationNo }, { status: 201 });

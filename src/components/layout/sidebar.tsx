@@ -54,14 +54,14 @@ export default function Sidebar({ activeTab, setActiveTab, isOpen = false, onClo
       <aside
         className={`
           fixed lg:static inset-y-0 left-0 z-50
-          w-20 flex flex-col items-center justify-between
+          w-65 lg:w-20 flex flex-col items-start lg:items-center justify-between
           border-r border-border bg-sidebar py-6
           shadow-[4px_0_24px_rgba(0,0,0,0.25)]
           transition-transform duration-300 ease-in-out
           ${isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
         `}
       >
-        <div className="flex flex-col items-center gap-8 w-full relative">
+        <div className="flex flex-col items-center gap-8 w-full relative px-6 lg:px-0">
           {/* Mobile close button */}
           <button
             onClick={onClose}
@@ -77,7 +77,7 @@ export default function Sidebar({ activeTab, setActiveTab, isOpen = false, onClo
           </div>
 
           {/* Nav items */}
-          <nav className="flex flex-col gap-2.5 w-full px-3">
+          <nav className="flex flex-col gap-2.5 w-full">
             {sidebarItems.map((item) => {
               if (item.id === "Import & Export" && userRole !== "admin") {
                 return null; // hide for non-admins
@@ -94,16 +94,17 @@ export default function Sidebar({ activeTab, setActiveTab, isOpen = false, onClo
                         setActiveTab(item.id);
                         onClose?.();
                       }}
-                      className={`h-11 w-11 rounded-xl transition-all duration-300 relative ${
+                      className={`h-11 w-full lg:w-11 lg:rounded-xl transition-all duration-300 relative flex items-center justify-start lg:justify-center px-4 lg:px-0 gap-3 lg:gap-0 ${
                         isActive
-                          ? "bg-primary/10 text-primary hover:bg-primary/15 border border-primary/30 shadow-[0_0_10px_rgba(197,160,89,0.1)]"
-                          : "text-muted-foreground hover:text-foreground hover:bg-accent/40"
+                          ? "bg-primary/10 text-primary hover:bg-primary/15 border border-primary/30 shadow-[0_0_10px_rgba(197,160,89,0.1)] rounded-xl lg:rounded-xl"
+                          : "text-muted-foreground hover:text-foreground hover:bg-accent/40 rounded-xl"
                       }`}
                     >
                       {isActive && (
-                        <span className="absolute left-0 top-3 bottom-3 w-0.5 bg-primary rounded-full" />
+                        <span className="absolute left-0 top-3 bottom-3 w-1 lg:w-0.5 bg-primary rounded-full" />
                       )}
-                      <Icon className="h-5 w-5" strokeWidth={1.75} />
+                      <Icon className="h-5 w-5 shrink-0" strokeWidth={1.75} />
+                      <span className="lg:hidden text-sm font-semibold whitespace-nowrap">{item.id}</span>
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="right" className="bg-popover text-popover-foreground border border-border shadow-xl font-medium text-xs">
@@ -115,9 +116,14 @@ export default function Sidebar({ activeTab, setActiveTab, isOpen = false, onClo
           </nav>
         </div>
 
-        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground hover:bg-accent/40 rounded-xl h-10 w-10">
-          <ChevronLeft className="h-5 w-5" />
-        </Button>
+        <div className="w-full px-6 lg:px-0 flex justify-center lg:justify-center">
+          <Button variant="ghost" size="icon" onClick={onClose} className="lg:hidden text-muted-foreground hover:text-foreground hover:bg-accent/40 rounded-xl h-10 w-full flex items-center gap-2 justify-center border border-border">
+            <ChevronLeft className="h-5 w-5" /> Close Menu
+          </Button>
+          <Button variant="ghost" size="icon" className="hidden lg:flex text-muted-foreground hover:text-foreground hover:bg-accent/40 rounded-xl h-10 w-10">
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
+        </div>
       </aside>
     </>
   );

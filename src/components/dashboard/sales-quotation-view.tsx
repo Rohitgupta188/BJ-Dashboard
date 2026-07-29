@@ -311,10 +311,10 @@ export default function SalesQuotationView() {
               <div>
                 <p className="text-sm font-semibold text-foreground">Ready to scan</p>
                 <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">
-                  Use a Bluetooth / USB scanner, or open{" "}
+                  Open{" "}
                   <a href="/scan" target="_blank" rel="noopener noreferrer" className="text-primary font-mono text-[11px] underline-offset-2 hover:underline">
                     /scan
-                  </a>{" "}on your phone.
+                  </a>{" "}on your phone to scan items directly into this quotation.
                 </p>
               </div>
               <div className="flex gap-1.5">
@@ -387,7 +387,7 @@ export default function SalesQuotationView() {
                 <Clock className="h-3.5 w-3.5" />
                 Recent Scans
               </div>
-              <div className="flex flex-col gap-2 pb-24">
+              <div className="flex flex-col gap-2 pb-2">
                 {history.map((h, i) => (
                   <button
                     key={`${h.sku}-${i}`}

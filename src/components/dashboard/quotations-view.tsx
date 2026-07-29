@@ -236,7 +236,7 @@ export default function QuotationsView() {
     <>
       {/* ── Quotations ────────────────────────────────────────────────────── */}
       {/* Stats cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-6 text-foreground mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 text-foreground mb-5">
         <StatCard
           title="Gross Weight"
           value={`${totalGross.toFixed(2)} g`}
@@ -260,8 +260,8 @@ export default function QuotationsView() {
       </div>
 
       {/* Toolbar - Responsive */}
-      <div className="bg-card p-4 rounded-xl border border-border shadow-sm flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between mb-6">
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
+      <div className="bg-card p-2.5 rounded-xl border border-border shadow-sm flex flex-col lg:flex-row gap-2 items-start lg:items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row items-center gap-2 w-full lg:w-auto">
           <div className="relative w-full sm:w-64">
             <Search className="absolute left-3 top-2.5 text-muted-foreground h-4 w-4" />
             <Input
@@ -289,7 +289,7 @@ export default function QuotationsView() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+        <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
           <Button
             variant="outline" size="icon"
             onClick={handleBulkDownload}
@@ -314,7 +314,6 @@ export default function QuotationsView() {
             className="h-9 gap-1.5 text-xs border-primary/50 text-primary hover:bg-primary/10 hover:border-primary transition"
           >
             <RotateCcw className={`h-3.5 w-3.5 ${isRefetching || loading ? "animate-spin" : ""}`} />
-            Refresh
           </Button>
         </div>
       </div>
@@ -344,7 +343,7 @@ export default function QuotationsView() {
         </div>
         
         {/* Mobile Cards */}
-        <div className="lg:hidden flex flex-col gap-3 pb-24">
+        <div className="lg:hidden flex flex-col gap-3 pb-2">
           {loading && Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="bg-card p-4 rounded-xl border border-border flex gap-4 animate-pulse">
               <div className="h-12 w-12 bg-muted rounded-lg" />
@@ -529,30 +528,30 @@ export default function QuotationsView() {
       </div>
       </div>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
+      {/* ── Pagination ──────────────────────────────────────────────────────── */}
+      {totalPages > 1 && !loading && !error && (
         <div className="flex flex-col sm:flex-row items-center justify-between bg-card px-4 py-3 border border-border rounded-xl shadow-sm gap-3">
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground w-full sm:w-auto text-center sm:text-left">
             Page <span className="text-foreground font-semibold">{page}</span> of{" "}
             <span className="text-foreground font-semibold">{totalPages}</span>
-            {total > 0 && <span> · {total.toLocaleString()} total</span>}
+            {total > 0 && <span className="hidden sm:inline"> · {total.toLocaleString()} total</span>}
           </p>
-          <div className="flex items-center gap-2 w-full lg:w-auto order-3 lg:order-0 mt-4 lg:mt-0 justify-center">
+          <div className="flex flex-wrap items-center justify-center gap-2 w-full sm:w-auto">
             <Button
               variant="outline" size="sm"
               onClick={() => setPage(p => Math.max(p - 1, 1))}
               disabled={page === 1 || loading}
-              className="h-8 gap-1 text-xs border-border text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-40"
+              className="h-8 w-8 sm:w-auto p-0 sm:px-3 gap-1 text-xs border-border text-muted-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/30 disabled:opacity-40"
             >
-              <ChevronLeft className="h-3.5 w-3.5" /> Prev
+              <ChevronLeft className="h-4 w-4 sm:h-3.5 sm:w-3.5" /> <span className="hidden sm:inline">Prev</span>
             </Button>
             <Button
               variant="outline" size="sm"
               onClick={() => setPage(p => Math.min(p + 1, totalPages))}
               disabled={page === totalPages || loading}
-              className="h-8 gap-1 text-xs border-border text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-40"
+              className="h-8 w-8 sm:w-auto p-0 sm:px-3 gap-1 text-xs border-border text-muted-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/30 disabled:opacity-40"
             >
-              Next <ChevronRight className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Next</span> <ChevronRight className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
             </Button>
           </div>
         </div>
@@ -573,7 +572,7 @@ export default function QuotationsView() {
 function StatCard({ title, value, icon }: { title: string; value: string; icon: React.ReactNode }) {
   return (
     <Card className="shadow-[0_8px_30px_rgba(0,0,0,0.06)] border-border/50 bg-card transition-all hover:border-primary/30 group rounded-[16px] lg:rounded-xl">
-      <CardContent className="p-3.5 lg:p-5 flex flex-row items-center gap-3 lg:gap-4">
+      <CardContent className="px-3 pt-0 pb-0 lg:p-4 flex flex-row items-center gap-3.5 lg:gap-4">
         <div className="w-10 h-10 lg:w-12 lg:h-12 shrink-0 bg-[#C5A059]/10 rounded-xl flex items-center justify-center text-[#C5A059] border border-[#C5A059]/20">
           {icon}
         </div>

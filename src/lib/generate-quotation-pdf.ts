@@ -84,13 +84,22 @@ export async function buildQuotationPDF(params: BuildQuotationPDFParams): Promis
     [`Date: ${date}`],
   ];
 
-  const remarksText = `Remarks: ${remarks || "N/A"}`;
+  if (remarks) {
+    infoRows.push([`Remarks: ${remarks}`]);
+  }
+
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8.5);
-  const remarksLines = doc.splitTextToSize(remarksText, infoW - 4);
-  const rowH = 6;
-  const remarksH = Math.max(rowH, remarksLines.length * 4 + 4);
-  const totalH = (infoRows.length * rowH) + remarksH;
+
+  const parsedRows = infoRows.map(r => {
+    const lines = doc.splitTextToSize(r[0], infoW - 4);
+    return {
+      text: lines,
+      height: Math.max(6, lines.length * 4 + 2)
+    };
+  });
+
+  const totalH = parsedRows.reduce((sum, r) => sum + r.height, 0);
 
   // Draw outer box
   doc.setDrawColor(0, 0, 0);
@@ -101,20 +110,12 @@ export async function buildQuotationPDF(params: BuildQuotationPDFParams): Promis
   doc.line(logoX, curY, logoX, curY + totalH);
 
   // Draw info rows
-  infoRows.forEach((row, i) => {
-    const y = curY + i * rowH;
-    if (i > 0) doc.line(margin, y, logoX, y);
-    doc.setFont("helvetica", "bold");
-    doc.text(row[0], margin + 2, y + 4);
+  let currentYOffset = curY;
+  parsedRows.forEach((row, i) => {
+    if (i > 0) doc.line(margin, currentYOffset, logoX, currentYOffset);
+    doc.text(row.text, margin + 2, currentYOffset + 4);
+    currentYOffset += row.height;
   });
-
-  // Draw remarks row line
-  const remarksY = curY + infoRows.length * rowH;
-  doc.line(margin, remarksY, logoX, remarksY);
-  
-  // Draw remarks text
-  doc.setFont("helvetica", "bold");
-  doc.text(remarksLines, margin + 2, remarksY + 4);
 
   // Draw logo
   if (logoBase64) {
@@ -351,5 +352,5 @@ export async function buildQuotationPDF(params: BuildQuotationPDFParams): Promis
   }
 
   // Save
-  doc.save(`Quotation_${quotationNo}.pdf`);
+  doc.save(`${quotationNo || "Quotation"}.pdf`);
 }

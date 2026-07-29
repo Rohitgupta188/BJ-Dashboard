@@ -14,14 +14,16 @@ export const GET = withAuth(async (req: NextRequest) => {
     const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
     const pageSize = Math.max(1, parseInt(searchParams.get("pageSize") ?? "10", 10));
 
+    const safeSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
     const filter = search
       ? {
           $or: [
-            { name: { $regex: search, $options: "i" } },
-            { contactName: { $regex: search, $options: "i" } },
-            { email: { $regex: search, $options: "i" } },
-            { phone: { $regex: search, $options: "i" } },
-            { address: { $regex: search, $options: "i" } },
+            { name: { $regex: `\\b${safeSearch}`, $options: "i" } },
+            { contactName: { $regex: `\\b${safeSearch}`, $options: "i" } },
+            { email: { $regex: safeSearch, $options: "i" } },
+            { phone: { $regex: safeSearch, $options: "i" } },
+            { address: { $regex: safeSearch, $options: "i" } },
           ],
         }
       : {};

@@ -266,52 +266,54 @@ export default function ProductsTableView({ userRole }: { userRole?: string }) {
           />
         </div>
 
-        {/* Status filter */}
-        <Select value={itemStatus} onValueChange={v => { setItemStatus(v as "ALL" | "CATALOGUE" | "INSTOCK"); setCurrentPage(1); }}>
-          <SelectTrigger className="w-32 h-9 text-xs bg-muted/30 border-border text-foreground focus:ring-primary">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="bg-popover border-border">
-            <SelectItem value="ALL">All</SelectItem>
-            <SelectItem value="CATALOGUE">Catalogue</SelectItem>
-            <SelectItem value="INSTOCK">In Stock</SelectItem>
-          </SelectContent>
-        </Select>
+        {/* Right Controls Container */}
+        <div className="flex flex-wrap items-center justify-between sm:justify-end gap-3 w-full sm:w-auto sm:flex-1">
+          {/* Status filter */}
+          <Select value={itemStatus} onValueChange={v => { setItemStatus(v as "ALL" | "CATALOGUE" | "INSTOCK"); setCurrentPage(1); }}>
+            <SelectTrigger className="w-32 h-9 text-xs bg-muted/30 border-border text-foreground focus:ring-primary">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-popover border-border">
+              <SelectItem value="ALL">All</SelectItem>
+              <SelectItem value="CATALOGUE">Catalogue</SelectItem>
+              <SelectItem value="INSTOCK">In Stock</SelectItem>
+            </SelectContent>
+          </Select>
 
-        {/* Spacer */}
-        <div className="flex-1" />
+          <div className="flex items-center gap-2">
+            {/* Item count */}
+            {!isLoading && totalItems > 0 && (
+              <span className="text-[10px] text-muted-foreground font-mono bg-muted/30 px-2.5 py-1 rounded-md border border-border hidden sm:inline-flex">
+                {totalItems.toLocaleString()} items
+              </span>
+            )}
 
-        {/* Item count */}
-        {!isLoading && totalItems > 0 && (
-          <span className="text-[10px] text-muted-foreground font-mono bg-muted/30 px-2.5 py-1 rounded-md border border-border">
-            {totalItems.toLocaleString()} items
-          </span>
-        )}
+            {/* Delete selected (Admin only) */}
+            {userRole === "admin" && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={deleteSelected}
+                disabled={selectedSkus.size === 0}
+                className="h-9 gap-1.5 text-xs border-destructive text-destructive hover:bg-destructive hover:text-white disabled:opacity-30 transition-all"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">DELETE</span>
+              </Button>
+            )}
 
-        {/* Delete selected (Admin only) */}
-        {userRole === "admin" && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={deleteSelected}
-            disabled={selectedSkus.size === 0}
-            className="h-9 gap-1.5 text-xs border-destructive text-destructive hover:bg-destructive hover:text-white disabled:opacity-30 transition-all"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            DELETE PRODUCTS
-          </Button>
-        )}
-
-        {/* Refresh */}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={fetchData}
-          className="h-9 gap-1.5 text-xs border-primary/50 text-primary hover:bg-primary/10 hover:border-primary transition-all"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
-          PRODUCTS
-        </Button>
+            {/* Refresh */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchData}
+              className="h-9 gap-1.5 text-xs border-primary/50 text-primary hover:bg-primary/10 hover:border-primary transition-all"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
+              <span className="hidden sm:inline">REFRESH</span>
+            </Button>
+          </div>
+        </div>
       </div>
 
       {/* ── Error ───────────────────────────────────────────────────────────── */}
@@ -324,7 +326,7 @@ export default function ProductsTableView({ userRole }: { userRole?: string }) {
       )}
 
       {/* ── Mobile Product Cards ────────────────────────────────────────────── */}
-      <div className="md:hidden flex flex-col gap-3 pb-24">
+      <div className="md:hidden flex flex-col gap-3 pb-2">
         {/* Loading skeleton */}
         {isLoading && Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="bg-card p-4 rounded-xl border border-border flex gap-4 animate-pulse">
@@ -352,7 +354,7 @@ export default function ProductsTableView({ userRole }: { userRole?: string }) {
           const isSelected = selectedSkus.has(product.sku);
           const isDeleting = deletingSkus.has(product.sku);
           return (
-            <div 
+            <div
               key={product.sku}
               onClick={() => userRole === "admin" && toggleOne(product.sku)}
               className={`bg-card rounded-xl border overflow-hidden p-3 flex gap-3 shadow-sm transition-all ${isSelected ? "border-[#C5A059] ring-1 ring-[#C5A059]/20 bg-[#C5A059]/5" : "border-border"} ${isDeleting ? "opacity-40 pointer-events-none" : ""}`}
@@ -372,7 +374,7 @@ export default function ProductsTableView({ userRole }: { userRole?: string }) {
                   <span className="text-2xl">💎</span>
                 )}
               </div>
-              
+
               {/* Right details */}
               <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
                 <div className="flex items-start justify-between gap-2">
@@ -382,13 +384,13 @@ export default function ProductsTableView({ userRole }: { userRole?: string }) {
                   </div>
                   {userRole === "admin" && (
                     <div className="flex items-center gap-1 shrink-0">
-                      <button 
+                      <button
                         onClick={(e) => { e.stopPropagation(); setEditingProduct(product); }}
                         className="h-7 w-7 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center hover:bg-emerald-500/20"
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
-                      <button 
+                      <button
                         onClick={(e) => { e.stopPropagation(); deleteSingle(product.sku); }}
                         disabled={isDeleting}
                         className="h-7 w-7 rounded-full bg-destructive/10 text-destructive flex items-center justify-center hover:bg-destructive/20"
@@ -398,7 +400,7 @@ export default function ProductsTableView({ userRole }: { userRole?: string }) {
                     </div>
                   )}
                 </div>
-                
+
                 <div className="flex items-end justify-between mt-2">
                   <div className="flex flex-col">
                     <span className="text-[10px] text-muted-foreground">{product.metalType || "—"} • {product.itemType || product.sku?.substring(0, 4)}</span>
@@ -563,19 +565,19 @@ export default function ProductsTableView({ userRole }: { userRole?: string }) {
       {/* ── Pagination ──────────────────────────────────────────────────────── */}
       {totalPages > 1 && !error && (
         <div className="flex flex-col sm:flex-row items-center justify-between bg-card px-4 py-3 border border-border rounded-xl shadow-sm gap-3">
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground w-full sm:w-auto text-center sm:text-left">
             Page <span className="text-foreground font-semibold">{currentPage}</span> of{" "}
             <span className="text-foreground font-semibold">{totalPages}</span>
-            {totalItems > 0 && <span> · {totalItems.toLocaleString()} total</span>}
+            {totalItems > 0 && <span className="hidden sm:inline"> · {totalItems.toLocaleString()} total</span>}
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-center gap-2 w-full sm:w-auto">
             <Button
               variant="outline" size="sm"
               onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
               disabled={currentPage === 1 || isLoading}
-              className="h-8 gap-1 text-xs border-border text-muted-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/30 disabled:opacity-40"
+              className="h-8 w-8 sm:w-auto p-0 sm:px-3 gap-1 text-xs border-border text-muted-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/30 disabled:opacity-40"
             >
-              <ChevronLeft className="h-3.5 w-3.5" /> Prev
+              <ChevronLeft className="h-4 w-4 sm:h-3.5 sm:w-3.5" /> <span className="hidden sm:inline">Prev</span>
             </Button>
             <div className="flex items-center gap-1">
               {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
@@ -588,7 +590,7 @@ export default function ProductsTableView({ userRole }: { userRole?: string }) {
                     className={`h-8 w-8 rounded-lg text-xs font-semibold transition-all ${pg === currentPage
                       ? "bg-primary text-primary-foreground shadow-[0_0_12px_rgba(197,160,89,0.3)]"
                       : "border border-border text-muted-foreground hover:bg-primary/10 hover:text-primary"
-                    }`}
+                      }`}
                   >
                     {pg}
                   </button>
@@ -599,9 +601,9 @@ export default function ProductsTableView({ userRole }: { userRole?: string }) {
               variant="outline" size="sm"
               onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
               disabled={currentPage === totalPages || isLoading}
-              className="h-8 gap-1 text-xs border-border text-muted-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/30 disabled:opacity-40"
+              className="h-8 w-8 sm:w-auto p-0 sm:px-3 gap-1 text-xs border-border text-muted-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/30 disabled:opacity-40"
             >
-              Next <ChevronRight className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Next</span> <ChevronRight className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
             </Button>
           </div>
         </div>

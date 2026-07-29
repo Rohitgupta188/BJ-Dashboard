@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { CatalogueItem } from "./catalogue-view";
 import { generateCatalogPDF } from "@/lib/generate-pdf";
+import { buildQuotationPDF } from "@/lib/generate-quotation-pdf";
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -27,11 +28,38 @@ export default function CartDrawer({
   const [mounted, setMounted] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
-  const handleDownloadPDF = async () => {
+  const handleDownloadPDF = async (template: "executive" | "sales") => {
     if (cart.length === 0) return;
     setIsGeneratingPDF(true);
     try {
-      await generateCatalogPDF(cart);
+      if (template === "executive") {
+        await generateCatalogPDF({ items: cart });
+      } else {
+        // Map cart items to quotation items format for Sales Quotation template
+        const lineItems = cart.map(item => ({
+          sku: item.sku,
+          designNumber: item.designNumber,
+          grossWeight: item.grossWeight,
+          netWeight: item.netWeight !== undefined ? item.netWeight : item.grossWeight,
+          metalPurity: item.metalPurity,
+          metalType: item.metalType,
+          imageUrl: item.imageUrl,
+          itemType: item.itemType,
+          qty: 1
+        }));
+
+        await buildQuotationPDF({
+          quotationNo: "CART-PDF",
+          companyName: "",
+          contactName: "",
+          address: "",
+          remarks: "",
+          date: new Date().toLocaleDateString(),
+          lineItems,
+          logoBase64: null, // Will use default if any
+          withImages: true,
+        });
+      }
     } catch (err) {
       console.error("PDF generation failed:", err);
       alert("Failed to generate PDF. Check console for details.");
@@ -71,17 +99,15 @@ export default function CartDrawer({
     <>
       {/* Backdrop overlay */}
       <div
-        className={`fixed inset-0 bg-black/60 backdrop-blur-xs z-50 transition-opacity duration-300 ${
-          isOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-        }`}
+        className={`fixed inset-0 bg-black/60 backdrop-blur-xs z-50 transition-opacity duration-300 ${isOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+          }`}
         onClick={onClose}
       />
 
       {/* Cart Slider Panel */}
       <div
-        className={`fixed right-0 top-0 h-full w-full sm:w-[460px] bg-card border-l border-border shadow-[0_0_50px_rgba(0,0,0,0.4)] z-50 flex flex-col transition-transform duration-300 ease-out transform ${
-          isOpen ? "translate-x-0" : "translate-x-full"
-        }`}
+        className={`fixed right-0 top-0 h-full w-full sm:w-115 bg-card border-l border-border shadow-[0_0_50px_rgba(0,0,0,0.4)] z-50 flex flex-col transition-transform duration-300 ease-out transform ${isOpen ? "translate-x-0" : "translate-x-full"
+          }`}
       >
         {/* Drawer Header */}
         <div className="p-6 border-b border-border flex items-center justify-between bg-muted/10">
@@ -99,22 +125,7 @@ export default function CartDrawer({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {cart.length > 0 && (
-              <button
-                type="button"
-                onClick={handleDownloadPDF}
-                disabled={isGeneratingPDF}
-                className="py-1 px-2.5 h-8 rounded-lg border border-primary/20 bg-primary/10 hover:bg-primary/20 text-primary hover:text-amber-600 transition-all duration-200 flex items-center gap-1.5 text-xs font-semibold shadow-[0_2px_8px_rgba(197,160,89,0.08)] disabled:opacity-50"
-                title="Download PDF"
-              >
-                {isGeneratingPDF ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <FileText className="h-3.5 w-3.5" />
-                )}
-                <span>PDF</span>
-              </button>
-            )}
+            {/* Removed DropdownMenu to fix mobile closing issue. Buttons are now in the footer. */}
             <button
               type="button"
               onClick={onClose}
@@ -135,7 +146,7 @@ export default function CartDrawer({
                 <ShoppingBag className="h-7 w-7" strokeWidth={1.5} />
               </div>
               <p className="text-sm font-semibold text-foreground">Your cart is empty</p>
-              <p className="text-xs text-muted-foreground/80 max-w-[240px] mt-1.5">
+              <p className="text-xs text-muted-foreground/80 max-w-60 mt-1.5">
                 Browse the jewelry catalogue and select designs to add them to your quotation cart.
               </p>
               <Button
@@ -236,22 +247,31 @@ export default function CartDrawer({
 
             <Separator className="bg-border" />
 
-            <div className="flex gap-3">
+            <div className="flex flex-wrap sm:flex-nowrap gap-2 sm:gap-3">
               <Button
                 type="button"
                 variant="outline"
                 onClick={onClearCart}
-                className="flex-1 h-11 border-border text-muted-foreground hover:text-foreground hover:bg-accent text-xs font-semibold rounded-xl"
+                className="flex-1 min-w-25 h-11 border-border text-muted-foreground hover:text-foreground hover:bg-accent text-xs font-semibold rounded-xl"
               >
                 Clear Cart
               </Button>
-              {/* <Button
+              <Button
                 type="button"
-                onClick={onCreateQuotation}
-                className="flex-2 h-11 bg-primary text-primary-foreground hover:bg-primary/95 text-xs font-bold uppercase tracking-wider rounded-xl shadow-[0_4px_15px_rgba(197,160,89,0.3)] hover:shadow-[0_6px_20px_rgba(197,160,89,0.4)] flex items-center justify-center gap-1.5 transition-all"
+                disabled={isGeneratingPDF}
+                onClick={() => handleDownloadPDF("executive")}
+                className="flex-1 min-w-30 h-11 bg-primary text-primary-foreground hover:bg-primary/95 text-[10px] font-bold uppercase tracking-wider rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-[0_4px_15px_rgba(197,160,89,0.3)] hover:shadow-[0_6px_20px_rgba(197,160,89,0.4)]"
               >
-                Create Quotation <ArrowRight className="h-3.5 w-3.5" />
-              </Button> */}
+                {isGeneratingPDF ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />} Executive PDF
+              </Button>
+              <Button
+                type="button"
+                disabled={isGeneratingPDF}
+                onClick={() => handleDownloadPDF("sales")}
+                className="flex-1 min-w-30 h-11 bg-primary text-primary-foreground hover:bg-primary/95 text-[10px] font-bold uppercase tracking-wider rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-[0_4px_15px_rgba(197,160,89,0.3)] hover:shadow-[0_6px_20px_rgba(197,160,89,0.4)]"
+              >
+                {isGeneratingPDF ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />} Sales PDF
+              </Button>
             </div>
           </div>
         )}

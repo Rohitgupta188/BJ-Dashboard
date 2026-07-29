@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { buildQuotationPDF, PdfQuotationLineItem } from "@/lib/generate-quotation-pdf";
+import { generateCatalogPDF } from "@/lib/generate-pdf";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface LineItem {
@@ -61,6 +62,7 @@ export default function QuotationExportModal({ lineItems, onClose, onExported }:
   const [showCustDrop, setShowCustDrop] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [templateStyle, setTemplateStyle] = useState<"sales" | "executive">("sales");
   const dropRef = useRef<HTMLDivElement>(null);
 
   // ── Load cached form (except remarks) ─────────────────────────────────────
@@ -195,18 +197,33 @@ export default function QuotationExportModal({ lineItems, onClose, onExported }:
         remarks: "",
       }));
 
-      // Generate PDF
-      await buildQuotationPDF({
-        quotationNo: quotationNo,
-        companyName: form.companyName,
-        contactName: form.contactName,
-        address: form.address,
-        remarks: form.remarks,
-        date: new Date().toLocaleDateString("en-IN"),
-        lineItems: mappedLineItems,
-        logoBase64,
-        withImages: true,
-      });
+      // Generate PDF based on selected template
+      if (templateStyle === "executive") {
+        await generateCatalogPDF({
+          items: mappedLineItems as any,
+          customer: {
+            companyName: form.companyName,
+            contactName: form.contactName,
+            address: form.address,
+            quotationNo: quotationNo,
+            date: new Date().toLocaleDateString("en-IN"),
+            logoBase64,
+            remarks: form.remarks
+          }
+        });
+      } else {
+        await buildQuotationPDF({
+          quotationNo: quotationNo,
+          companyName: form.companyName,
+          contactName: form.contactName,
+          address: form.address,
+          remarks: form.remarks,
+          date: new Date().toLocaleDateString("en-IN"),
+          lineItems: mappedLineItems,
+          logoBase64,
+          withImages: true,
+        });
+      }
 
       onExported(quotationNo);
     } catch (e: unknown) {
@@ -365,6 +382,25 @@ export default function QuotationExportModal({ lineItems, onClose, onExported }:
                   {i + 1}. {li.product.designNumber}
                 </span>
               ))}
+            </div>
+          </div>
+
+          {/* Template Style Selection */}
+          <div className="pt-2">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2 font-medium">
+              Template Style
+            </p>
+            <div className="flex gap-3">
+              <label className={`flex-1 flex flex-col items-center justify-center p-3 border rounded-xl cursor-pointer transition-all ${templateStyle === "sales" ? "border-primary bg-primary/10 shadow-[0_0_15px_rgba(197,160,89,0.15)]" : "border-border hover:bg-muted/20"}`}>
+                <input type="radio" name="template" value="sales" checked={templateStyle === "sales"} onChange={() => setTemplateStyle("sales")} className="hidden" />
+                <span className={`text-sm font-bold ${templateStyle === "sales" ? "text-primary" : "text-foreground"}`}>Sales Quotation</span>
+                <span className="text-[10px] text-muted-foreground mt-1">Standard layout with remarks</span>
+              </label>
+              <label className={`flex-1 flex flex-col items-center justify-center p-3 border rounded-xl cursor-pointer transition-all ${templateStyle === "executive" ? "border-primary bg-primary/10 shadow-[0_0_15px_rgba(197,160,89,0.15)]" : "border-border hover:bg-muted/20"}`}>
+                <input type="radio" name="template" value="executive" checked={templateStyle === "executive"} onChange={() => setTemplateStyle("executive")} className="hidden" />
+                <span className={`text-sm font-bold ${templateStyle === "executive" ? "text-primary" : "text-foreground"}`}>Executive Catalog</span>
+                <span className="text-[10px] text-muted-foreground mt-1">Premium image grid layout</span>
+              </label>
             </div>
           </div>
 

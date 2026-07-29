@@ -2,6 +2,7 @@ import * as XLSX from "xlsx";
 import { getDriveClient }  from "@/lib/drive/client";
 import Catalog             from "@/models/Catalog";
 import { makeRowReader }   from "@/lib/drive/normalize";
+import { objectExistsInBucket, DEFAULT_UPLOAD_FOLDER } from "@/lib/backblaze";
 
 
 type ItemStatus = "CATALOGUE" | "INSTOCK";
@@ -18,6 +19,9 @@ interface ParsedRow {
   designNumber:   string;
   rfid:           string;
   imageName:      string;
+  imageUrl?:      string;
+  storageProvider?: string;
+  storagePath?:   string;
   itemType:       string;
   grossWeight:    number;
   netWeight:      number;
@@ -37,9 +41,9 @@ export interface ExcelProcessResult {
   errors:   string[];
 }
 
-function parseRow(
+async function parseRow(
   raw: Record<string, unknown>
-): ParsedRow | null {
+): Promise<ParsedRow | null> {
   const get = makeRowReader(raw);
 
   const sku = get("SKU Number", "SKUNumber", "sku");
@@ -48,27 +52,57 @@ function parseRow(
   const designNumber  = get("Design Number", "DesignNumber");
   const imageNameCell = get("Image Name",    "ImageName");
 
-  // Priority: explicit Image Name cell → fall back to Design Number
-  const imageName = imageNameCell || designNumber;
+  // Strictly use explicit Image Name cell
+  const imageName = String(imageNameCell || "").trim();
+
+  let imageUrl = undefined;
+  let storageProvider = undefined;
+  let storagePath = undefined;
+
+  if (imageName) {
+    const endpoint = process.env.IMAGEKIT_URL_ENDPOINT?.replace(/\/$/, "");
+    const hasExt = /\.(jpg|jpeg|png|webp|gif)$/i.test(imageName);
+    const finalName = hasExt ? imageName : `${imageName}.jpg`;
+    
+    const objectKey = `${DEFAULT_UPLOAD_FOLDER}/${finalName}`;
+    
+    // Check backblaze first, as requested.
+    const exists = await objectExistsInBucket(objectKey);
+    
+    if (exists) {
+      // ImageKit URLs map exactly to the Backblaze objectKey (which includes the folder)
+      imageUrl = `${endpoint}/${objectKey}`;
+      storageProvider = "backblaze";
+      storagePath = objectKey;
+    }
+  }
 
   const itemStatus = parseItemStatus(get("Item Status", "ItemStatus", "Status"));
 
-  return {
+  const resultRow: ParsedRow = {
     sku,
-    designNumber,
-    rfid:           get("RFID Tag",       "RFID",          "RFIDTag"),
+    designNumber:   String(designNumber || "").trim(),
+    rfid:           String(get("RFID Tag",       "RFID",          "RFIDTag") || "").trim(),
     imageName,
-    itemType:       get("Item Type",       "ItemType"),
+    itemType:       String(get("Item Type",       "ItemType") || "").trim(),
     grossWeight:    Number(get("Gross Weight",    "GrossWeight"))  || 0,
     netWeight:      Number(get("Net Weight",      "NetWeight"))    || 0,
     stoneWeight:    Number(get("Stone Weight",    "StoneWeight"))  || 0,
-    collectionLine: get("Collection Line",  "CollectionLine"),
-    metalType:      get("Metal Type",        "MetalType"),
-    metalPurity:    get("Metal Purity",      "MetalPurity"),
+    collectionLine: get("Collection Line",  "CollectionLine") as string,
+    metalType:      get("Metal Type",        "MetalType") as string,
+    metalPurity:    get("Metal Purity",      "MetalPurity") as string,
     itemStatus,
     isCatalog: itemStatus === "CATALOGUE",
     isInstock:  itemStatus === "INSTOCK",
   };
+
+  if (imageUrl) {
+    resultRow.imageUrl = imageUrl;
+    resultRow.storageProvider = storageProvider;
+    resultRow.storagePath = storagePath;
+  }
+
+  return resultRow;
 }
 
 
@@ -108,7 +142,7 @@ export async function processExcelFile(
   let skipped = 0;
 
   for (let i = 0; i < rawRows.length; i++) {
-    const row = parseRow(rawRows[i]);
+    const row = await parseRow(rawRows[i]);
     if (!row) {
       skipped++;
       errors.push(`Row ${i + 2}: missing SKU — skipped`);
