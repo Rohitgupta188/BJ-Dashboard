@@ -6,8 +6,9 @@ import Image from "next/image";
 import {
   Scan, X, Clock, ChevronRight,
   Loader2, Keyboard, Smartphone, FileText, Plus,
-  Trash2, ShoppingBag,
+  Trash2, ShoppingBag, Usb, Bluetooth,
 } from "lucide-react";
+import { useScannerContext } from "@/components/scanner-provider";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface Product {
@@ -39,32 +40,33 @@ interface HistoryEntry {
 /**
  * SalesScanner
  *
- * THREE input modes (all active simultaneously):
+ * THREE input modes (all active simultaneously via ScannerManager):
  *
- * 1. HARDWARE SCANNER (HID/Bluetooth/USB)
- *    Scanner types the barcode as keyboard input → global keydown listener
- *    buffers chars and flushes on Enter or 200ms idle.
+ * 1. HARDWARE SCANNER — HID Keyboard / Bluetooth Classic HID
+ *    Handled by HIDAdapter in ScannerManager (global keydown listener).
+ *    Buffers characters and flushes on Enter or 200 ms silence.
+ *    Zero duplicate listeners here.
  *
- * 2. PHONE CAMERA (cross-device)
- *    Phone opens /scan → POST /api/scanner/push → SSE stream fires here.
- *    Product details fetched from /api/catalog/[sku] and shown instantly.
+ * 2. BLUETOOTH SPP / USB SERIAL
+ *    SerialAdapter opens a COM port after user clicks "Connect" in BluetoothPanel.
+ *    Reads raw bytes from the serial stream, emits completed lines as SKUs.
  *
  * 3. MANUAL SKU ENTRY
- *    Click the input, type a SKU, press Enter.
+ *    Click the input field, type a SKU, press Enter.
+ *    Independent of the scanner manager — pure form interaction.
  *
- * After a product appears, employee clicks "Add to Quotation" to build a list,
- * then clicks "Create Quotation" to generate a PDF.
+ * All hardware scans arrive via lastScannedSku from ScannerContext.
+ * SalesScanner never directly listens to keyboard events.
  */
 export default function SalesScanner() {
   const router = useRouter();
 
+  // ── Scanner context ────────────────────────────────────────────────────────
+  const { lastScannedSku, statuses, currentInput } = useScannerContext();
 
-
-  // ── HID / keyboard scanner ─────────────────────────────────────────────────
-  const hidBuffer = useRef<string>("");
-  const hidTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hidInputRef = useRef<HTMLInputElement>(null);
-  const [hidValue, setHidValue] = useState("");
+  // ── Manual input ref ───────────────────────────────────────────────────────
+  const manualInputRef = useRef<HTMLInputElement>(null);
+  const [manualValue, setManualValue] = useState("");
 
   // ── Product display ────────────────────────────────────────────────────────
   const [product, setProduct] = useState<Product | null>(null);
@@ -86,8 +88,7 @@ export default function SalesScanner() {
 
     setLoading(true);
     setNotFound(null);
-    setHidValue("");
-    hidBuffer.current = "";
+    setManualValue("");
 
     try {
       const res = await fetch(`/api/catalog/${encodeURIComponent(sku)}`);
@@ -112,42 +113,13 @@ export default function SalesScanner() {
     }
   }, []);
 
-  // ── HID keyboard listener ──────────────────────────────────────────────────
+  // ── React to scans from ScannerManager (HID + Serial + SPP) ───────────────
+  //    lastScannedSku changes on every new scan from any adapter.
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Enter" || e.key === "Return") {
-        if (hidBuffer.current.trim()) {
-          const sku = hidBuffer.current.trim();
-          hidBuffer.current = "";
-          if (hidTimer.current) clearTimeout(hidTimer.current);
-          fetchProduct(sku);
-        }
-        return;
-      }
-
-      const active = document.activeElement;
-      const isOurInput = active === hidInputRef.current;
-      const isOtherInput = !isOurInput && (
-        active instanceof HTMLInputElement ||
-        active instanceof HTMLTextAreaElement ||
-        active instanceof HTMLSelectElement
-      );
-      if (isOtherInput) return;
-
-      if (e.key.length === 1) {
-        hidBuffer.current += e.key;
-        setHidValue(hidBuffer.current);
-        if (hidTimer.current) clearTimeout(hidTimer.current);
-        hidTimer.current = setTimeout(() => {
-          if (hidBuffer.current.trim()) fetchProduct(hidBuffer.current.trim());
-        }, 200);
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [fetchProduct]);
-
+    if (lastScannedSku) {
+      fetchProduct(lastScannedSku.sku);
+    }
+  }, [lastScannedSku, fetchProduct]);
 
   // ── Quotation helpers ──────────────────────────────────────────────────────
   const addToQuote = () => {
@@ -175,6 +147,10 @@ export default function SalesScanner() {
     return p.imageUrl ?? null;
   }
 
+  // ── Adapter status pills ───────────────────────────────────────────────────
+  const hidReady   = statuses.hid    === "ready";
+  const serialReady = statuses.serial === "ready";
+
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="flex gap-6 h-full">
@@ -194,15 +170,27 @@ export default function SalesScanner() {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            {/* HID always active */}
-            <div className="flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-3 py-1 text-[11px] font-medium text-primary">
+
+            {/* HID status — live from adapter */}
+            <div className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-medium transition-colors ${
+              hidReady
+                ? "border-primary/30 bg-primary/5 text-primary"
+                : "border-border bg-muted/5 text-muted-foreground/50"
+            }`}>
               <Keyboard className="h-3 w-3" />
-              Scanner Ready
+              {hidReady ? "HID Ready" : "HID"}
             </div>
-            <div className="flex items-center gap-1.5 rounded-full border border-emerald-700/40 bg-emerald-900/15 px-3 py-1 text-[11px] font-medium text-emerald-400">
-              <Smartphone className="h-3 w-3" />
-              Phone Ready
+
+            {/* SPP / Serial status — live from adapter */}
+            <div className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-medium transition-colors ${
+              serialReady
+                ? "border-emerald-700/40 bg-emerald-900/15 text-emerald-400"
+                : "border-border bg-muted/5 text-muted-foreground/50"
+            }`}>
+              <Bluetooth className="h-3 w-3" />
+              {serialReady ? "SPP Connected" : "SPP"}
             </div>
+
             <button
               onClick={() => router.push('/scan')}
               className="flex items-center gap-1.5 rounded-full bg-primary/10 border border-primary/30 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors"
@@ -213,29 +201,39 @@ export default function SalesScanner() {
           </div>
         </div>
 
-        {/* Manual input */}
+        {/* Live HID input feedback — shows what the scanner is buffering */}
+        {currentInput && (
+          <div className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-4 py-2 shrink-0 animate-pulse">
+            <Keyboard className="h-3.5 w-3.5 text-primary/60 shrink-0" />
+            <span className="font-mono text-sm text-primary tracking-widest">{currentInput}</span>
+            <span className="text-[10px] text-muted-foreground ml-auto">scanning…</span>
+          </div>
+        )}
+
+        {/* Manual input — for typed SKU lookups, independent of hardware */}
         <div className="flex items-center gap-3 shrink-0">
           <div className="relative flex-1">
             <Scan className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
-              ref={hidInputRef}
+              ref={manualInputRef}
+              id="manual-sku-input"
               type="text"
-              value={hidValue}
-              placeholder="Waiting for scanner… (or type SKU and press Enter)"
-              readOnly
-              onFocus={() => hidInputRef.current?.removeAttribute("readonly")}
+              value={manualValue}
+              placeholder="Type SKU manually and press Enter…"
               onKeyDown={e => {
-                if (e.key === "Enter" && hidValue.trim()) {
-                  fetchProduct(hidValue.trim());
-                  setHidValue(""); hidBuffer.current = "";
+                if (e.key === "Enter" && manualValue.trim()) {
+                  fetchProduct(manualValue.trim());
                 }
               }}
-              onChange={e => { hidBuffer.current = e.target.value; setHidValue(e.target.value); }}
+              onChange={e => setManualValue(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-border bg-card text-sm text-foreground placeholder:text-muted-foreground/50 font-mono focus:outline-none focus:ring-2 focus:ring-primary/40 transition"
             />
           </div>
-          {hidValue && (
-            <button onClick={() => { setHidValue(""); hidBuffer.current = ""; }} className="text-muted-foreground hover:text-foreground transition p-1">
+          {manualValue && (
+            <button
+              onClick={() => setManualValue("")}
+              className="text-muted-foreground hover:text-foreground transition p-1"
+            >
               <X className="h-4 w-4" />
             </button>
           )}

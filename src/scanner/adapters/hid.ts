@@ -36,6 +36,7 @@ export class HIDAdapter implements ScannerAdapter {
   private buffer = "";
   private timer: ReturnType<typeof setTimeout> | null = null;
   private handler: ((e: KeyboardEvent) => void) | null = null;
+  private lastKeyTime = 0;
 
   start(
     onScan: ScanDispatch,
@@ -64,21 +65,41 @@ export class HIDAdapter implements ScannerAdapter {
       const isScannerInput = active?.dataset?.scannerInput === "true";
       const isOtherInput =
         !isScannerInput &&
-        (active instanceof HTMLInputElement ||
-          active instanceof HTMLTextAreaElement ||
-          active instanceof HTMLSelectElement);
+        active &&
+        (active.tagName === "INPUT" ||
+         active.tagName === "TEXTAREA" ||
+         active.tagName === "SELECT");
 
       if (isOtherInput) return;
 
       // Accept printable characters only.
       if (e.key.length !== 1) return;
 
+      const now = performance.now();
+      
+      // If it's been more than 100ms since the last keystroke, we assume this is the 
+      // START of a new sequence (either a human typing or a new scanner scan).
+      if (now - this.lastKeyTime > 100) {
+        this.buffer = ""; 
+      }
+      this.lastKeyTime = now;
+
       this.buffer += e.key;
       onInput?.(this.buffer);
 
       // Flush after 200 ms of silence.
       if (this.timer) clearTimeout(this.timer);
-      this.timer = setTimeout(flush, 200);
+      this.timer = setTimeout(() => {
+        // Only flush if it looks like a real scan (e.g. at least 3 characters)
+        // or if we explicitly got an Enter key (handled above).
+        // This prevents stray single-character human typing from triggering 404s.
+        if (this.buffer.length >= 3) {
+          flush();
+        } else {
+          this.buffer = "";
+          onInput?.("");
+        }
+      }, 200);
     };
 
     window.addEventListener("keydown", this.handler);

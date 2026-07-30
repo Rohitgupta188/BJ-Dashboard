@@ -211,9 +211,9 @@ export default function BluetoothPanel({
                     </div>
                     <button
                       onClick={disconnectSerial}
-                      className="text-muted-foreground hover:text-destructive transition"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-red-900/30 bg-red-900/20 text-xs font-semibold text-red-400 hover:bg-red-900/40 hover:text-red-300 transition"
                     >
-                      <X className="h-4 w-4" />
+                      <X className="h-3.5 w-3.5" /> Disconnect
                     </button>
                   </div>
                 ) : (

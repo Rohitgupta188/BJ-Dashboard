@@ -12,6 +12,7 @@ import OtherViews from "@/components/dashboard/other-views";
 import CustomerView from "@/components/dashboard/customer-view";
 import CartDrawer from "@/components/dashboard/cart-drawer";
 import ProductsTableView from "@/components/dashboard/products-table-view";
+import SettingsView from "@/components/dashboard/settings-view";
 import { Loader2, Home, FileText, ScanLine, ScanBarcode, User, Settings, UserCheck, BookOpen } from "lucide-react";
 import CatalogImportPage from "@/components/dashboard/import-product";
 import { ScannerProvider, useScannerContext } from "@/components/scanner-provider";
@@ -73,6 +74,25 @@ function DashboardContent() {
       }
     }
   }, []);
+
+    // Global Fetch Interceptor for 401s
+  useEffect(() => {
+    const originalFetch = window.fetch;
+    window.fetch = async function (...args) {
+      const response = await originalFetch.apply(this, args);
+      if (response.status === 401) {
+        // Only redirect if we are not already on the login page (or trying to fetch auth/me itself inside a loop)
+        const url = args[0] as string;
+        if (!url.includes("/api/auth/me")) {
+           router.push("/login");
+        }
+      }
+      return response;
+    };
+    return () => {
+      window.fetch = originalFetch;
+    };
+  }, [router]);
 
   // Auth check
   useEffect(() => {
@@ -147,6 +167,8 @@ function DashboardContent() {
       case "Import & Export":
         if (user?.role !== "admin") return <div>Unauthorized</div>;
         return <CatalogImportPage />;
+      case "Settings":
+        return <SettingsView />;
       default:
         return <OtherViews tabName={activeTab} />;
     }

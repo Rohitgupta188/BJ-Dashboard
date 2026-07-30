@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
 import {
   ScannerManager,
+  HIDAdapter,
   type Statuses,
 } from "@/scanner";
 import { SerialAdapter } from "@/scanner/adapters/serial";
@@ -15,6 +16,8 @@ interface ScannerContextValue {
   requestAdapterConnection: (adapterId: string) => Promise<string>;
   disconnectAdapter: (adapterId: string) => void;
   lastScannedSku: { sku: string; timestamp: number } | null;
+  batteryStatus: string | null;
+  rawLastScan: string | null;
 }
 
 const ScannerContext = createContext<ScannerContextValue | null>(null);
@@ -24,6 +27,8 @@ export function ScannerProvider({ children }: { children: React.ReactNode }) {
   const [currentInput, setCurrentInput] = useState("");
   const [adapterLabels, setAdapterLabels] = useState<Record<string, string>>({});
   const [lastScannedSku, setLastScannedSku] = useState<{ sku: string; timestamp: number } | null>(null);
+  const [batteryStatus, setBatteryStatus] = useState<string | null>(null);
+  const [rawLastScan, setRawLastScan] = useState<string | null>(null);
 
   const managerRef = useRef<ScannerManager | null>(null);
 
@@ -43,8 +48,8 @@ export function ScannerProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const manager = new ScannerManager()
-  
-      .register(new SerialAdapter());
+      .register(new HIDAdapter())    // Always-on: Bluetooth HID keyboard / USB scanner
+      .register(new SerialAdapter()); // User-initiated: USB serial or Bluetooth SPP
 
     managerRef.current = manager;
     setAdapterLabels(manager.getAdapterLabels());
@@ -52,7 +57,17 @@ export function ScannerProvider({ children }: { children: React.ReactNode }) {
     const unsubscribe = manager.onStatusChange(setStatuses);
 
     manager.start(
-      (sku) => setLastScannedSku({ sku, timestamp: Date.now() }),
+      (sku) => {
+        setRawLastScan(sku); // Capture exact hardware output for diagnostics
+        
+        // Intercept battery outputs (usually short strings with %, or containing bat/vol)
+        const lowerSku = sku.toLowerCase();
+        if ((sku.includes("%") && sku.length < 20) || lowerSku.includes("bat") || lowerSku.includes("vol") || lowerSku.includes("level")) {
+          setBatteryStatus(sku);
+          return; // Do not treat as a product SKU
+        }
+        setLastScannedSku({ sku, timestamp: Date.now() });
+      },
       (partial) => setCurrentInput(partial)
     );
 
@@ -73,6 +88,8 @@ export function ScannerProvider({ children }: { children: React.ReactNode }) {
         requestAdapterConnection,
         disconnectAdapter,
         lastScannedSku,
+        batteryStatus,
+        rawLastScan,
       }}
     >
       {children}

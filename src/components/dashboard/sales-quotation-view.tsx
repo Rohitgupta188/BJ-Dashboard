@@ -60,6 +60,7 @@ export default function SalesQuotationView() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportedQNo, setExportedQNo] = useState<string | null>(null);
+  const [manualValue, setManualValue] = useState("");
 
   // ── LocalStorage hydration ─────────────────────────────────────────────────
   useEffect(() => {
@@ -148,7 +149,10 @@ export default function SalesQuotationView() {
   const handleManualKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       const val = (e.target as HTMLInputElement).value.trim();
-      if (val) { fetchProduct(val); clearInput(); }
+      if (val) { 
+        fetchProduct(val); 
+        setManualValue(""); 
+      }
     }
   };
 
@@ -214,22 +218,30 @@ export default function SalesQuotationView() {
             </div>
           </div>
 
-          {/* Scanner input */}
+          {/* Live HID input feedback — shows what the scanner is buffering */}
+          {currentInput && (
+            <div className="flex items-center gap-2 rounded-xl border border-[#C5A059]/20 bg-[#C5A059]/5 px-4 py-2 shrink-0 animate-pulse mb-2">
+              <Keyboard className="h-3.5 w-3.5 text-[#C5A059]/60 shrink-0" />
+              <span className="font-mono text-sm text-[#C5A059] tracking-widest">{currentInput}</span>
+              <span className="text-[10px] text-muted-foreground ml-auto">scanning…</span>
+            </div>
+          )}
+
+          {/* Manual input */}
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
               <Scan className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
               <input
                 type="text"
-                value={currentInput}
-                data-scanner-input="true"
-                placeholder="Waiting for scanner… or type a SKU and press Enter"
-                onChange={() => { }}
+                value={manualValue}
+                placeholder="Type SKU manually and press Enter…"
+                onChange={e => setManualValue(e.target.value)}
                 onKeyDown={handleManualKeyDown}
                 className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground/50 font-mono focus:outline-none focus:ring-2 focus:ring-[#C5A059]/40 focus:border-[#C5A059]/50 transition shadow-inner"
               />
             </div>
-            {currentInput && (
-              <button type="button" onClick={clearInput} className="text-muted-foreground hover:text-foreground transition p-1">
+            {manualValue && (
+              <button type="button" onClick={() => setManualValue("")} className="text-muted-foreground hover:text-foreground transition p-1">
                 <X className="h-4 w-4" />
               </button>
             )}
