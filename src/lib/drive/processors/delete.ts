@@ -82,6 +82,9 @@ export async function processDeletedFile(
   }
   
   const msg = `[drive/delete] Ignored deletion of unsupported type "${mime}" (${name || fileId})`;
-  console.log(msg);
+  // Only log if it actually had a mime type (Google Drive sends empty mime types for permanently expunged files)
+  if (mime) {
+    console.log(msg);
+  }
   return { handled: false, message: msg };
 }

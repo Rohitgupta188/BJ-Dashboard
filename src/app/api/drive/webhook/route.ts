@@ -42,8 +42,9 @@ async function processChanges(): Promise<void> {
   const folderId = FOLDER_ID;
   let pageToken: string | null | undefined = channel.pageToken;
   let totalProcessed = 0;
-  let pagesFetched = 0;
-  const MAX_PAGES = 5; // Safely process up to 5 pages per webhook to avoid 60s Vercel timeout
+  
+  // Vercel limits execution to 60s. We use a strict 45s timer to guarantee a safe exit.
+  const startTime = Date.now();
 
   // Cache to avoid hitting the Drive API sequentially for the same parent folders
   const parentCache = new Map<string, boolean>();
@@ -77,15 +78,24 @@ async function processChanges(): Promise<void> {
         parentCache.set(parentId, false);
       }
     }
+
     return false;
   }
 
-  while (pageToken && pagesFetched < MAX_PAGES) {
-    pagesFetched++;
+  let pagesProcessed = 0;
+
+  while (pageToken) {
+    if (Date.now() - startTime > 45000) {
+      console.log(`[drive/webhook] Reached 45s time limit. Stopping early to save progress safely before Vercel timeout.`);
+      break;
+    }
+    
+    pagesProcessed++;
     
     const changesRes: GaxiosResponseWithHTTP2<drive_v3.Schema$ChangeList> =
       await drive.changes.list({
         pageToken,
+        pageSize: 50, // Small pages so we hit the 45s timer check frequently
         fields:
           "nextPageToken, newStartPageToken, " +
           "changes(fileId, removed, file(id, name, mimeType, parents, trashed))",
@@ -105,10 +115,10 @@ async function processChanges(): Promise<void> {
 
       // ── Deletion / trash ────────────────────────────────────────────────────
       if (change.removed || file?.trashed) {
-        // When a file is fully purged, Drive sends the change with file=null.
-        // We still attempt cleanup using whatever metadata we have.
+        // When a file is fully purged, Drive sends the change with file=null and no parents.
+        // We set this to `false` because we already handle deletions when they are moved to the Trash (where parents are still present).
         const isWatched =
-          parents.length > 0 ? await isInWatchedFolder(parents) : true;
+          parents.length > 0 ? await isInWatchedFolder(parents) : false;
 
         if (isWatched) {
           try {
@@ -175,11 +185,7 @@ async function processChanges(): Promise<void> {
     }
   }
 
-  if (pageToken) {
-    console.log(`[drive/webhook] Reached max pages (${MAX_PAGES}). Stopping early to prevent timeout. Progress saved.`);
-  }
-
-  console.log(`[drive/webhook] Batch complete — processed ${totalProcessed} file(s) across ${pagesFetched} page(s)`);
+  console.log(`[drive/webhook] Batch complete — processed ${totalProcessed} file(s) across ${pagesProcessed} page(s)`);
 }
 
 export const dynamic = "force-dynamic";
