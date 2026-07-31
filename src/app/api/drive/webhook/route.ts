@@ -42,6 +42,11 @@ async function processChanges(): Promise<void> {
   const folderId = FOLDER_ID;
   let pageToken: string | null | undefined = channel.pageToken;
   let totalProcessed = 0;
+  let pagesFetched = 0;
+  const MAX_PAGES = 5; // Safely process up to 5 pages per webhook to avoid 60s Vercel timeout
+
+  // Cache to avoid hitting the Drive API sequentially for the same parent folders
+  const parentCache = new Map<string, boolean>();
 
   // ── Helper: check if a file lives in the watched folder OR any subfolder ──
   // The Drive API `parents` array only contains the *direct* parent folder.
@@ -53,21 +58,31 @@ async function processChanges(): Promise<void> {
 
     // One level deep — check each parent folder's own parents
     for (const parentId of fileParents) {
+      if (parentCache.has(parentId)) {
+        if (parentCache.get(parentId)) return true;
+        continue;
+      }
+
       try {
         const parentRes = await drive.files.get({
           fileId: parentId,
           fields: "parents",
         });
         const grandparents: string[] = parentRes.data.parents ?? [];
-        if (grandparents.includes(folderId)) return true;
+        const isChild = grandparents.includes(folderId);
+        parentCache.set(parentId, isChild);
+        if (isChild) return true;
       } catch {
         // parent folder not accessible — skip
+        parentCache.set(parentId, false);
       }
     }
     return false;
   }
 
-  while (pageToken) {
+  while (pageToken && pagesFetched < MAX_PAGES) {
+    pagesFetched++;
+    
     const changesRes: GaxiosResponseWithHTTP2<drive_v3.Schema$ChangeList> =
       await drive.changes.list({
         pageToken,
@@ -148,17 +163,23 @@ async function processChanges(): Promise<void> {
 
     if (changesRes.data.nextPageToken) {
       pageToken = changesRes.data.nextPageToken;
+      // Save progress so if Vercel times out, we don't start from the beginning
+      await DriveChannel.findByIdAndUpdate("main", { pageToken });
     } else {
       const newToken = changesRes.data.newStartPageToken;
       if (newToken) {
         await DriveChannel.findByIdAndUpdate("main", { pageToken: newToken });
-        console.log(`[drive/webhook] pageToken advanced to ${newToken}`);
+        console.log(`[drive/webhook] Caught up to latest. newStartPageToken advanced to ${newToken}`);
       }
       pageToken = null;
     }
   }
 
-  console.log(`[drive/webhook] Batch complete — processed ${totalProcessed} file(s)`);
+  if (pageToken) {
+    console.log(`[drive/webhook] Reached max pages (${MAX_PAGES}). Stopping early to prevent timeout. Progress saved.`);
+  }
+
+  console.log(`[drive/webhook] Batch complete — processed ${totalProcessed} file(s) across ${pagesFetched} page(s)`);
 }
 
 export const dynamic = "force-dynamic";
