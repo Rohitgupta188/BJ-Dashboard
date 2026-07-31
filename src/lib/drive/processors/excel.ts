@@ -59,6 +59,8 @@ async function parseRow(
   let storageProvider = undefined;
   let storagePath = undefined;
 
+  const designNumberStr = String(designNumber || "").trim();
+
   if (imageName) {
     const endpoint = process.env.IMAGEKIT_URL_ENDPOINT?.replace(/\/$/, "");
     const hasExt = /\.(jpg|jpeg|png|webp|gif)$/i.test(imageName);
@@ -77,11 +79,38 @@ async function parseRow(
     }
   }
 
+  // Fallback: Check DB for existing item with same designNumber
+  if (!imageUrl && designNumberStr) {
+    const existing = await Catalog.findOne({ 
+      designNumber: designNumberStr, 
+      imageUrl: { $exists: true, $ne: null } 
+    }).lean();
+
+    if (existing && existing.imageUrl) {
+      imageUrl = existing.imageUrl;
+      storageProvider = existing.storageProvider;
+      storagePath = existing.storagePath;
+    }
+  }
+
+  // Fallback 2: Check Backblaze for designNumber.jpg
+  if (!imageUrl && designNumberStr) {
+    const endpoint = process.env.IMAGEKIT_URL_ENDPOINT?.replace(/\/$/, "");
+    const objectKey = `${DEFAULT_UPLOAD_FOLDER}/${designNumberStr}.jpg`;
+    const exists = await objectExistsInBucket(objectKey);
+    
+    if (exists) {
+      imageUrl = `${endpoint}/${objectKey}`;
+      storageProvider = "backblaze";
+      storagePath = objectKey;
+    }
+  }
+
   const itemStatus = parseItemStatus(get("Item Status", "ItemStatus", "Status"));
 
   const resultRow: ParsedRow = {
     sku,
-    designNumber:   String(designNumber || "").trim(),
+    designNumber:   designNumberStr,
     rfid:           String(get("RFID Tag",       "RFID",          "RFIDTag") || "").trim(),
     imageName,
     itemType:       String(get("Item Type",       "ItemType") || "").trim(),
