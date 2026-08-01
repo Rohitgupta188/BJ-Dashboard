@@ -1,9 +1,9 @@
-import * as XLSX from "xlsx";
+import * as XLSX       from "xlsx";
 import { getDriveClient }  from "@/lib/drive/client";
 import Catalog             from "@/models/Catalog";
 import { makeRowReader }   from "@/lib/drive/normalize";
-import { objectExistsInBucket, DEFAULT_UPLOAD_FOLDER } from "@/lib/backblaze";
 
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type ItemStatus = "CATALOGUE" | "INSTOCK";
 
@@ -19,9 +19,6 @@ interface ParsedRow {
   designNumber:   string;
   rfid:           string;
   imageName:      string;
-  imageUrl?:      string;
-  storageProvider?: string;
-  storagePath?:   string;
   itemType:       string;
   grossWeight:    number;
   netWeight:      number;
@@ -32,6 +29,10 @@ interface ParsedRow {
   itemStatus:     ItemStatus;
   isCatalog:      boolean;
   isInstock:      boolean;
+  // Image fields — populated from DB lookup, NOT from Backblaze
+  imageUrl?:       string;
+  storageProvider?: string;
+  storagePath?:    string;
 }
 
 export interface ExcelProcessResult {
@@ -41,115 +42,64 @@ export interface ExcelProcessResult {
   errors:   string[];
 }
 
-async function parseRow(
-  raw: Record<string, unknown>
-): Promise<ParsedRow | null> {
+// ─── Row Parser (sync — zero network calls) ────────────────────────────────
+
+/**
+ * Converts a raw spreadsheet row to a typed ParsedRow.
+ * This is intentionally synchronous — no DB or HTTP calls here.
+ * Image fields are resolved in a single batch lookup AFTER all rows are parsed.
+ */
+function parseRow(raw: Record<string, unknown>): ParsedRow | null {
   const get = makeRowReader(raw);
 
   const sku = get("SKU Number", "SKUNumber", "sku");
-  if (!sku) return null; 
+  if (!sku) return null;
 
-  const designNumber  = get("Design Number", "DesignNumber");
-  const imageNameCell = get("Image Name",    "ImageName");
+  const designNumber    = String(get("Design Number", "DesignNumber") || "").trim();
+  const imageName       = String(get("Image Name",    "ImageName")    || "").trim();
+  const itemStatus      = parseItemStatus(get("Item Status", "ItemStatus", "Status"));
 
-  // Strictly use explicit Image Name cell
-  const imageName = String(imageNameCell || "").trim();
-
-  let imageUrl = undefined;
-  let storageProvider = undefined;
-  let storagePath = undefined;
-
-  const designNumberStr = String(designNumber || "").trim();
-
-  if (imageName) {
-    const endpoint = process.env.IMAGEKIT_URL_ENDPOINT?.replace(/\/$/, "");
-    const hasExt = /\.(jpg|jpeg|png|webp|gif)$/i.test(imageName);
-    const finalName = hasExt ? imageName : `${imageName}.jpg`;
-    
-    const objectKey = `${DEFAULT_UPLOAD_FOLDER}/${finalName}`;
-    
-    // Check backblaze first, as requested.
-    const exists = await objectExistsInBucket(objectKey);
-    
-    if (exists) {
-      // ImageKit URLs map exactly to the Backblaze objectKey (which includes the folder)
-      imageUrl = `${endpoint}/${objectKey}`;
-      storageProvider = "backblaze";
-      storagePath = objectKey;
-    }
-  }
-
-  // Fallback: Check DB for existing item with same designNumber
-  if (!imageUrl && designNumberStr) {
-    const existing = await Catalog.findOne({ 
-      designNumber: designNumberStr, 
-      imageUrl: { $exists: true, $ne: null } 
-    }).lean();
-
-    if (existing && existing.imageUrl) {
-      imageUrl = existing.imageUrl;
-      storageProvider = existing.storageProvider;
-      storagePath = existing.storagePath;
-    }
-  }
-
-  // Fallback 2: Check Backblaze for designNumber.jpg
-  if (!imageUrl && designNumberStr) {
-    const endpoint = process.env.IMAGEKIT_URL_ENDPOINT?.replace(/\/$/, "");
-    const objectKey = `${DEFAULT_UPLOAD_FOLDER}/${designNumberStr}.jpg`;
-    const exists = await objectExistsInBucket(objectKey);
-    
-    if (exists) {
-      imageUrl = `${endpoint}/${objectKey}`;
-      storageProvider = "backblaze";
-      storagePath = objectKey;
-    }
-  }
-
-  const itemStatus = parseItemStatus(get("Item Status", "ItemStatus", "Status"));
-
-  const resultRow: ParsedRow = {
+  return {
     sku,
-    designNumber:   designNumberStr,
-    rfid:           String(get("RFID Tag",       "RFID",          "RFIDTag") || "").trim(),
+    designNumber,
     imageName,
-    itemType:       String(get("Item Type",       "ItemType") || "").trim(),
-    grossWeight:    Number(get("Gross Weight",    "GrossWeight"))  || 0,
-    netWeight:      Number(get("Net Weight",      "NetWeight"))    || 0,
-    stoneWeight:    Number(get("Stone Weight",    "StoneWeight"))  || 0,
-    collectionLine: get("Collection Line",  "CollectionLine") as string,
-    metalType:      get("Metal Type",        "MetalType") as string,
-    metalPurity:    get("Metal Purity",      "MetalPurity") as string,
+    rfid:           String(get("RFID Tag",        "RFID",          "RFIDTag")    || "").trim(),
+    itemType:       String(get("Item Type",        "ItemType")                   || "").trim(),
+    grossWeight:    Number(get("Gross Weight",     "GrossWeight"))  || 0,
+    netWeight:      Number(get("Net Weight",       "NetWeight"))    || 0,
+    stoneWeight:    Number(get("Stone Weight",     "StoneWeight"))  || 0,
+    collectionLine: String(get("Collection Line",  "CollectionLine")             || "").trim(),
+    metalType:      String(get("Metal Type",       "MetalType")                  || "").trim(),
+    metalPurity:    String(get("Metal Purity",     "MetalPurity")                || "").trim(),
     itemStatus,
     isCatalog: itemStatus === "CATALOGUE",
     isInstock:  itemStatus === "INSTOCK",
   };
-
-  if (imageUrl) {
-    resultRow.imageUrl = imageUrl;
-    resultRow.storageProvider = storageProvider;
-    resultRow.storagePath = storagePath;
-  }
-
-  return resultRow;
 }
 
+// ─── Main Export ──────────────────────────────────────────────────────────────
 
 export async function processExcelFile(
   fileId:   string,
   fileName: string
 ): Promise<ExcelProcessResult> {
-  const drive  = getDriveClient();
+  const fnStart = Date.now();
   const errors: string[] = [];
 
-  console.log(`[drive/excel] Processing ${fileName} (fileId=${fileId})...`);
+  console.log(`[drive/excel] ▶ START ${fileName} (fileId=${fileId})`);
 
+  // ── 1. Download from Google Drive ─────────────────────────────────────────
+  const t1 = Date.now();
+  const drive = getDriveClient();
   const downloadRes = await drive.files.get(
     { fileId, alt: "media" },
     { responseType: "arraybuffer" }
   );
   const buffer = Buffer.from(downloadRes.data as ArrayBuffer);
+  console.log(`[drive/excel]   → Drive download: ${Date.now() - t1}ms (${buffer.length} bytes)`);
 
+  // ── 2. Parse workbook ─────────────────────────────────────────────────────
+  const t2 = Date.now();
   const workbook  = XLSX.read(buffer, { type: "buffer" });
   const sheetName = workbook.SheetNames[0];
   if (!sheetName) {
@@ -161,40 +111,89 @@ export async function processExcelFile(
     workbook.Sheets[sheetName],
     { defval: "" }
   );
+  console.log(`[drive/excel]   → XLSX parse: ${Date.now() - t2}ms (${rawRows.length} raw rows)`);
 
   if (rawRows.length === 0) {
     console.log(`[drive/excel] ${fileName}: empty sheet — skipped`);
     return { upserted: 0, modified: 0, skipped: 0, errors: [] };
   }
 
-  const bulkOps: Parameters<typeof Catalog.bulkWrite>[0] = [];
-  let skipped = 0;
+  // ── 3. Parse rows (sync — zero network calls) ─────────────────────────────
+  const t3 = Date.now();
+  const parsed: Array<ParsedRow | null> = rawRows.map((raw, i) => {
+    const row = parseRow(raw);
+    if (!row) errors.push(`Row ${i + 2}: missing SKU — skipped`);
+    return row;
+  });
+  const validRows = parsed.filter((r): r is ParsedRow => r !== null);
+  const skipped   = rawRows.length - validRows.length;
+  console.log(
+    `[drive/excel]   → row parse (sync): ${Date.now() - t3}ms ` +
+    `(${validRows.length} valid, ${skipped} skipped)`
+  );
 
-  for (let i = 0; i < rawRows.length; i++) {
-    const row = await parseRow(rawRows[i]);
-    if (!row) {
-      skipped++;
-      errors.push(`Row ${i + 2}: missing SKU — skipped`);
-      continue;
-    }
-    bulkOps.push({
-      updateOne: {
-        filter: { sku: row.sku },
-        update: { $set: { ...row, driveFileId: fileId } },  // tag with source Drive file ID
-        upsert: true,
-      },
-    });
-  }
-
-  if (bulkOps.length === 0) {
+  if (validRows.length === 0) {
     return { upserted: 0, modified: 0, skipped, errors };
   }
 
-  const result = await Catalog.bulkWrite(bulkOps, { ordered: false });
+  // ── 4. Single batch image lookup (one MongoDB query for the whole file) ───
+  const t4 = Date.now();
+  const designNumbers = validRows.map(r => r.designNumber);
+  const uniqueDesignNumbers = [...new Set(designNumbers.filter(Boolean))];
+  
+  const imageMap = new Map<string, { imageUrl: string; storageProvider?: string; storagePath?: string }>();
+  
+  if (uniqueDesignNumbers.length > 0) {
+    const existing = await Catalog.find(
+      { designNumber: { $in: uniqueDesignNumbers }, imageUrl: { $exists: true, $ne: null } },
+      { designNumber: 1, imageUrl: 1, storageProvider: 1, storagePath: 1 }
+    ).lean();
 
+    for (const doc of existing) {
+      if (doc.imageUrl) {
+        imageMap.set(doc.designNumber, {
+          imageUrl:        doc.imageUrl,
+          storageProvider: doc.storageProvider,
+          storagePath:     doc.storagePath,
+        });
+      }
+    }
+  }
+
+  console.log(`[drive/excel]   → image resolve total: ${Date.now() - t4}ms`);
+
+  // ── 5. Merge image data into rows ─────────────────────────────────────────
+  for (const row of validRows) {
+    const img = imageMap.get(row.designNumber);
+    if (img) {
+      row.imageUrl        = img.imageUrl;
+      row.storageProvider = img.storageProvider;
+      row.storagePath     = img.storagePath;
+    }
+  }
+
+  // ── 6. Build bulkWrite ops ────────────────────────────────────────────────
+  const bulkOps: Parameters<typeof Catalog.bulkWrite>[0] = validRows.map(row => ({
+    updateOne: {
+      filter: { sku: row.sku },
+      update: { $set: { ...row, driveFileId: fileId } },
+      upsert: true,
+    },
+  }));
+
+  // ── 7. Flush to MongoDB (single bulkWrite) ────────────────────────────────
+  const t7 = Date.now();
+  const result = await Catalog.bulkWrite(bulkOps, { ordered: false });
   console.log(
-    `[drive/excel] ${fileName} → ` +
-    `inserted=${result.upsertedCount} updated=${result.modifiedCount} skipped=${skipped}`
+    `[drive/excel]   → bulkWrite: ${Date.now() - t7}ms ` +
+    `(inserted=${result.upsertedCount} updated=${result.modifiedCount})`
+  );
+
+  const totalMs = Date.now() - fnStart;
+  console.log(
+    `[drive/excel] ■ DONE ${fileName} — ` +
+    `inserted=${result.upsertedCount} updated=${result.modifiedCount} skipped=${skipped} ` +
+    `total=${totalMs}ms`
   );
 
   return {
