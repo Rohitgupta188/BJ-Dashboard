@@ -19,14 +19,17 @@ export const GET = withAuth(async (request: NextRequest) => {
     const metalPurity = searchParams.get("metalPurity")?.trim();
     const metalType = searchParams.get("metalType")?.trim();
 
-    const filter: Record<string, unknown> = {
-      imageUrl: { $exists: true, $ne: null },
-    };
+    const requireImage = searchParams.get("requireImage")?.trim();
 
+    const filter: Record<string, unknown> = {};
+
+    if (requireImage === "true") {
+      filter.imageUrl = { $exists: true, $ne: null };
+    }
     if (search) {
       filter.designNumber = { $regex: search, $options: "i" };
     }
-    
+
     if (itemStatus) {
       filter.itemStatus = itemStatus;
     }

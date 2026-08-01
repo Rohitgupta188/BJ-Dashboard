@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import {
   Search, Loader2, AlertCircle, RefreshCw,
-  Trash2, Pencil, ChevronLeft, ChevronRight, X, CheckSquare
+  Trash2, Pencil, ChevronLeft, ChevronRight, X, CheckSquare, ImageOff
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -371,7 +371,10 @@ export default function ProductsTableView({ userRole }: { userRole?: string }) {
                     onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
                   />
                 ) : (
-                  <span className="text-2xl">💎</span>
+                  <div className="flex flex-col items-center justify-center text-muted-foreground/50">
+                    <ImageOff className="h-5 w-5 mb-1 opacity-50" />
+                    <span className="text-[8px] font-medium uppercase tracking-wider text-center leading-tight">No Image<br/>Uploaded</span>
+                  </div>
                 )}
               </div>
 
@@ -494,7 +497,10 @@ export default function ProductsTableView({ userRole }: { userRole?: string }) {
                             onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
                           />
                         ) : (
-                          <span className="text-3xl">💎</span>
+                          <div className="flex flex-col items-center justify-center text-muted-foreground/50">
+                            <ImageOff className="h-6 w-6 mb-1.5 opacity-50" />
+                            <span className="text-[9px] font-medium uppercase tracking-wider text-center leading-tight">No Image<br/>Uploaded</span>
+                          </div>
                         )}
                       </div>
                     </TableCell>

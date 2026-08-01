@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { Search, ChevronUp, SlidersHorizontal, ChevronLeft, ChevronRight, Loader2, AlertCircle, RefreshCw, ShoppingCart } from "lucide-react";
+import { Search, ChevronUp, SlidersHorizontal, ChevronLeft, ChevronRight, Loader2, AlertCircle, RefreshCw, ShoppingCart, ImageOff } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -217,8 +217,8 @@ export default function CatalogueView({ cart = [], onToggleCart }: CatalogueView
                     onToggleCart(product);
                   }}
                   className={`absolute bottom-3 left-3 z-10 p-2 rounded-lg border transition-all duration-300 shadow-md ${isInCart
-                      ? "bg-primary border-primary text-primary-foreground shadow-[0_0_12px_rgba(197,160,89,0.4)] hover:bg-primary/95 hover:scale-105"
-                      : "bg-background/80 hover:bg-background border-border text-muted-foreground hover:text-primary hover:scale-115"
+                    ? "bg-primary border-primary text-primary-foreground shadow-[0_0_12px_rgba(197,160,89,0.4)] hover:bg-primary/95 hover:scale-105"
+                    : "bg-background/80 hover:bg-background border-border text-muted-foreground hover:text-primary hover:scale-115"
                     }`}
                   title={isInCart ? "Remove from Cart" : "Add to Cart"}
                 >
@@ -238,9 +238,9 @@ export default function CatalogueView({ cart = [], onToggleCart }: CatalogueView
                     onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                   />
                 ) : (
-                  <div className="relative w-full h-full flex items-center justify-center bg-linear-to-br from-primary/12 via-primary/3 to-transparent shadow-[inset_0_0_12px_rgba(197,160,89,0.08)] transition-colors duration-500">
-                    <span className="text-5xl drop-shadow-[0_0_8px_rgba(197,160,89,0.4)] animate-pulse">💎</span>
-                    <span className="absolute top-2 right-2 text-xs text-primary/60">✨</span>
+                  <div className="relative w-full h-full flex flex-col items-center justify-center bg-muted/20 border border-border/40 transition-colors duration-500">
+                    <ImageOff className="h-8 w-8 text-muted-foreground/40 mb-2" strokeWidth={1.5} />
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">No Image Uploaded</span>
                   </div>
                 )}
               </div>
