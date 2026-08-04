@@ -12,6 +12,7 @@ export interface ICatalog extends Document {
   storagePath: string;
   imageUrl: string;
   imageKitFileId: string;
+  imageMd5?: string;
 
   itemStatus: "CATALOGUE" | "INSTOCK";
   itemType?: string;
@@ -80,6 +81,11 @@ const CatalogSchema = new Schema<ICatalog>(
 
     imageKitFileId: {
       type: String,
+    },
+
+    imageMd5: {
+      type: String,
+      trim: true,
     },
 
     itemStatus: {
