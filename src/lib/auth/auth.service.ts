@@ -1,7 +1,8 @@
 import { connectToDatabase } from "@/lib/db";
 import User, { type IUser } from "@/models/User";
-import { hashPassword, verifyPassword, signTokenPair, hashToken, verifyToken } from "@/lib/auth";
+import { hashPassword, verifyPassword, signTokenPair, hashToken, verifyToken,clearAuthCookies } from "@/lib/auth";
 import type { JwtPayload } from "@/lib/auth";
+
 
 type AuthResult =
   | { ok: true; user: IUser; accessToken: string; refreshToken: string; sid: string }
@@ -104,6 +105,7 @@ export async function loginUser(data: {
   });
 
   manageSessionsLimit(user);
+  user.markModified("sessions");
   await user.save();
 
   return { ok: true, user, accessToken, refreshToken, sid };
@@ -140,6 +142,7 @@ export async function rotateRefreshToken(refreshToken: string): Promise<AuthResu
   const refreshResult = await verifyToken(refreshToken, "refresh");
   if (!refreshResult.ok) {
     console.log("rotateRefreshToken failed: Invalid refresh token");
+    await clearAuthCookies();
     return { ok: false, error: "Invalid refresh token", status: 401 };
   }
 
@@ -147,6 +150,7 @@ export async function rotateRefreshToken(refreshToken: string): Promise<AuthResu
   
   if (!sid) {
     console.log("rotateRefreshToken failed: No session ID in token");
+    await clearAuthCookies();
     return { ok: false, error: "Session invalid", status: 401 };
   }
 
@@ -154,6 +158,7 @@ export async function rotateRefreshToken(refreshToken: string): Promise<AuthResu
 
   if (!user || !user.sessions) {
     console.log("rotateRefreshToken failed: User not found");
+    await clearAuthCookies();
     return { ok: false, error: "Session expired. Please log in again.", status: 401 };
   }
 
@@ -161,6 +166,7 @@ export async function rotateRefreshToken(refreshToken: string): Promise<AuthResu
   
   if (!session) {
     console.log("rotateRefreshToken failed: Session not found (already revoked)");
+    await clearAuthCookies();
     return { ok: false, error: "Session expired. Please log in again.", status: 401 };
   }
 
@@ -181,6 +187,7 @@ export async function rotateRefreshToken(refreshToken: string): Promise<AuthResu
       // Token theft detected on this specific session. Revoke it.
       user.sessions = user.sessions.filter(s => s.sessionId !== sid);
       await user.save();
+      await clearAuthCookies();
       return { ok: false, error: "Session invalid. Please log in again.", status: 401 };
     }
   }
