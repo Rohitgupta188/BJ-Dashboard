@@ -44,7 +44,6 @@ const CatalogSchema = new Schema<ICatalog>(
     designNumber: {
       type: String,
       required: true,
-      index: true, 
       trim: true,
     },
 
@@ -146,6 +145,24 @@ const CatalogSchema = new Schema<ICatalog>(
     timestamps: true,
     collection: "catalogs",
   }
+);
+export const CATALOG_COLLATION = { locale: "en", strength: 2 } as const;
+
+CatalogSchema.index(
+  { designNumber: 1 },
+  { collation: CATALOG_COLLATION, name: "idx_designNumber_ci" }
+);
+CatalogSchema.index(
+  { imageName: 1 },
+  { collation: CATALOG_COLLATION, name: "idx_imageName_ci" }
+);
+CatalogSchema.index(
+  { imageName: 1, imageUrl: 1 },
+  { collation: CATALOG_COLLATION, name: "idx_imageName_imageUrl_ci" }
+);
+CatalogSchema.index(
+  { designNumber: 1, imageUrl: 1 },
+  { collation: CATALOG_COLLATION, name: "idx_designNumber_imageUrl_ci" }
 );
 
 const Catalog =

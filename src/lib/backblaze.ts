@@ -1,6 +1,34 @@
 import { S3Client, PutObjectCommand, HeadObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import path from "path";
 
+// ─── B2 retry ─────────────────────────────────────────────────────────────────
+// AWS SDK v3 surfaces transient errors via $metadata.httpStatusCode (not .status).
+// B2 can return 429, 500, 503 transiently. Without retry, a single B2 hiccup
+// causes the image to be skipped permanently until the next Drive notification.
+
+async function withB2Retry<T>(
+  fn:      () => Promise<T>,
+  label?:  string,
+  retries: number = 3,
+): Promise<T> {
+  let n = 0;
+  while (true) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      const status = err?.$metadata?.httpStatusCode ?? err?.statusCode;
+      const retryable = status === 429 || status === 500 || status === 503;
+      if (!retryable || n >= retries) throw err;
+      const base  = Math.min(Math.pow(2, n) * 1_000, 32_000);
+      const delay = base + Math.floor(Math.random() * 1_000);
+      const tag   = label ? `[${label}] ` : "";
+      console.warn(`${tag}B2 error (${status}) — retry ${n + 1}/${retries} in ${delay}ms`);
+      await new Promise((r) => setTimeout(r, delay));
+      n++;
+    }
+  }
+}
+
 // ─── Environment validation ───────────────────────────────────────────────────
 
 const REQUIRED_ENV = [
@@ -85,13 +113,16 @@ export async function uploadBufferToBackblaze(
 ): Promise<{ key: string }> {
   const objectKey = `${folder}/${fileName}`;
 
-  await s3Client.send(
-    new PutObjectCommand({
-      Bucket: BUCKET_NAME,
-      Key: objectKey,
-      Body: buffer,
-      ContentType: contentType,
-    })
+  await withB2Retry(
+    () => s3Client.send(
+      new PutObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: objectKey,
+        Body: buffer,
+        ContentType: contentType,
+      })
+    ),
+    `B2 upload ${fileName}`
   );
 
   return { key: objectKey };
@@ -129,11 +160,14 @@ export async function uploadToBackblaze(
 
 export async function deleteFromBackblaze(objectKey: string): Promise<boolean> {
   try {
-    await s3Client.send(
-      new DeleteObjectCommand({
-        Bucket: BUCKET_NAME,
-        Key: objectKey,
-      })
+    await withB2Retry(
+      () => s3Client.send(
+        new DeleteObjectCommand({
+          Bucket: BUCKET_NAME,
+          Key: objectKey,
+        })
+      ),
+      `B2 delete ${objectKey}`
     );
     return true;
   } catch (err: any) {

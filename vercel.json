@@ -2,15 +2,22 @@
   "crons": [
     {
       "path": "/api/cron/renew-webhook",
-      "schedule": "0 0 */2 * *"
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/recover-webhook",
+      "schedule": "*/5 * * * *"
     }
   ],
   "functions": {
     "src/app/api/drive/webhook/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 300
     },
     "src/app/api/cron/renew-webhook/route.ts": {
       "maxDuration": 30
+    },
+    "src/app/api/cron/recover-webhook/route.ts": {
+      "maxDuration": 300
     }
   }
 }

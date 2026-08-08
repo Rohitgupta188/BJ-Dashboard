@@ -7,11 +7,14 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const authHeader = req.headers.get("authorization");
-    if (authHeader !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  // CRON_SECRET MUST be set. If missing, reject rather than skipping auth.
+  if (!cronSecret) {
+    console.error("[webhook-status] CRON_SECRET env var is not set — rejecting request");
+    return NextResponse.json({ error: "Server misconfiguration" }, { status: 500 });
+  }
+  const authHeader = req.headers.get("authorization");
+  if (authHeader !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   await connectToDatabase();
@@ -38,6 +41,6 @@ export async function GET(req: NextRequest) {
     expiresIn: `${daysLeft} day(s)`,
     daysLeft,
     renewedAt: channel.renewedAt ?? null,
-    pageToken: channel.pageToken.slice(0, 16) + "…",
+    // pageToken intentionally omitted — never expose tokens in API responses.
   });
 }

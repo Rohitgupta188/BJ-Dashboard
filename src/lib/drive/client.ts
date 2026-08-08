@@ -41,6 +41,17 @@ function buildAuth() {
 let _drive:  ReturnType<typeof google.drive>  | null = null;
 let _sheets: ReturnType<typeof google.sheets> | null = null;
 
+/**
+ * Clears the cached Drive and Sheets singletons so the next call rebuilds them
+ * with fresh credentials. Call this if a request fails with an auth-related error
+ * (e.g. 401 from the Drive API) to prevent a broken auth object from persisting
+ * across multiple Vercel invocations on the same warm instance.
+ */
+export function resetDriveClients(): void {
+  _drive  = null;
+  _sheets = null;
+}
+
 export function getDriveClient() {
   if (!_drive) _drive = google.drive({ version: "v3", auth: buildAuth() });
   return _drive;
