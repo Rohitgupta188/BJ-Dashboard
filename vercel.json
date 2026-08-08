@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/cron/recover-webhook",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 10 * * *"
     }
   ],
   "functions": {
