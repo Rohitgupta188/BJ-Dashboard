@@ -118,11 +118,19 @@ async function _acquireLockAndProcess(label: string): Promise<void> {
     // After each pass, atomically check-and-clear the pendingWork flag.
     // If any notification arrived while we were processing, loop immediately
     // instead of letting it wait for the recover-webhook cron.
+    //
+    // IMPORTANT: lockedChannel is re-read from DB before every subsequent pass.
+    // _processChanges advances pageToken in MongoDB during each pass.
+    // Without a re-read, pass 2 would use the stale pageToken from lock
+    // acquisition and replay the exact same Drive changes already processed
+    // in pass 1. Re-reading also refreshes lastModifiedTime so the
+    // modifiedTime guard can fire correctly across passes.
+    let channelForPass = lockedChannel;
     let pass = 0;
     while (true) {
       pass++;
       const passLabel = pass === 1 ? label : `${label}-pass${pass}`;
-      await _processChanges(passLabel, fnStart, lockedChannel);
+      await _processChanges(passLabel, fnStart, channelForPass);
 
       // Atomically clear pendingWork and check if it was set.
       const before = await DriveChannel.findByIdAndUpdate(
@@ -133,8 +141,16 @@ async function _acquireLockAndProcess(label: string): Promise<void> {
 
       if (!before?.pendingWork) break; // nothing queued — we're done
 
+      // Re-read channel to pick up the pageToken that the previous pass advanced.
+      const freshChannel = await DriveChannel.findById("main");
+      if (!freshChannel) {
+        console.warn("[drive/processChanges] Channel disappeared between passes — stopping drain loop.");
+        break;
+      }
+      channelForPass = freshChannel;
+
       console.log(
-        `[drive/processChanges] label=${label} pendingWork detected after pass ${pass} — looping.`
+        `[drive/processChanges] label=${label} pendingWork detected after pass ${pass} — looping from pageToken=...${channelForPass.pageToken?.slice(-8) ?? "??"}.`
       );
     }
   } catch (err: unknown) {
@@ -412,7 +428,17 @@ async function _processChanges(
           }
         }
 
-      } catch (err) {
+      } catch (err: any) {
+        if (err?.isFatal) {
+          console.error(`[drive/processChanges] label=${label} 🛑 FATAL ERROR [${i}] fileId=${fileId} — Aborting to prevent silent checkpoint!`);
+          throw err;
+        }
+        
+        if (err?.isHandled) {
+          // The error was durably persisted (e.g. to ImageSyncFailure). We can safely continue.
+          continue;
+        }
+
         console.error(
           `[drive/processChanges] label=${label} ⚠ SKIPPED_ERROR [${i}] fileId=${fileId} ` +
           `name="${file.name}" mimeType=${mimeType} — manual review required:`,
