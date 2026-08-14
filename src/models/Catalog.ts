@@ -10,7 +10,7 @@ export interface ICatalog extends Document {
   imageName: string;
   storageProvider: "backblaze";
   storagePath: string;
-  imageUrl: string;
+  imageUrl?: string;   // not required — items may not have an image yet
   imageMd5?: string;
 
   itemStatus: "CATALOGUE" | "INSTOCK";
