@@ -98,8 +98,8 @@ export async function generateCatalogPDF(params: ExecutivePdfParams | CatalogueI
   if (items.length === 0) return;
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-  const imageUrls = items.map((item) => item.imageUrl);
-  const imageResults = await Promise.all(imageUrls.map((url) => getImageDataUrl(url)));
+  const imageUrls = items.map((item) => item.imageUrl ?? "");
+  const imageResults = await Promise.all(imageUrls.map((url) => url ? getImageDataUrl(url) : Promise.resolve(null)));
 
   const pageWidth = 210;
   const pageHeight = 297;
