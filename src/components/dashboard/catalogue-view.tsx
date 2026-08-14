@@ -36,7 +36,7 @@ export interface CatalogueItem {
   collectionLine?: string;
   metalType: string;
   metalPurity: string;
-  imageUrl: string;
+  imageUrl?: string;  // not required — items may not have an image yet
 }
 
 interface CatalogApiResponse {

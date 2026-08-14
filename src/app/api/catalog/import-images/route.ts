@@ -101,7 +101,7 @@ export const POST = withAuth(async (req: NextRequest, _ctx: AuthenticatedRequest
             { imageName: filename       },
             { imageName: nameWithoutExt },
           ],
-          $or: [{ imageUrl: { $exists: false } }, { imageUrl: null }, { imageUrl: "" }],
+          imageUrl: { $in: [null, ""] }, // $in:[null] also matches missing fields
         })
           .collation(CATALOG_COLLATION)
           .select("_id designNumber");

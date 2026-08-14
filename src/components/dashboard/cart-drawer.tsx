@@ -1,12 +1,14 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { X, Trash2, ShoppingBag, ArrowRight, FileText, Loader2 } from "lucide-react";
+import { Trash2, ShoppingBag, FileText, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { CatalogueItem } from "./catalogue-view";
-import { generateCatalogPDF } from "@/lib/generate-pdf";
-import { buildQuotationPDF } from "@/lib/generate-quotation-pdf";
+import { generateCatalogPDF } from "@/lib/pdf";
+import { buildQuotationPDF } from "@/lib/pdf";
+import { buildProductionPDF } from "@/lib/pdf";
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -28,14 +30,13 @@ export default function CartDrawer({
   const [mounted, setMounted] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
-  const handleDownloadPDF = async (template: "executive" | "sales") => {
+  const handleDownloadPDF = async (template: "executive" | "sales" | "production") => {
     if (cart.length === 0) return;
     setIsGeneratingPDF(true);
     try {
       if (template === "executive") {
         await generateCatalogPDF({ items: cart });
       } else {
-        // Map cart items to quotation items format for Sales Quotation template
         const lineItems = cart.map(item => ({
           sku: item.sku,
           designNumber: item.designNumber,
@@ -48,17 +49,30 @@ export default function CartDrawer({
           qty: 1
         }));
 
-        await buildQuotationPDF({
-          quotationNo: "CART-PDF",
-          companyName: "",
-          contactName: "",
-          address: "",
-          remarks: "",
-          date: new Date().toLocaleDateString(),
-          lineItems,
-          logoBase64: null, // Will use default if any
-          withImages: true,
-        });
+        if (template === "production") {
+          await buildProductionPDF({
+            quotationNo: "CART-PDF",
+            companyName: "",
+            contactName: "",
+            address: "",
+            remarks: "",
+            date: new Date().toLocaleDateString(),
+            lineItems,
+            logoBase64: null,
+          });
+        } else {
+          await buildQuotationPDF({
+            quotationNo: "CART-PDF",
+            companyName: "",
+            contactName: "",
+            address: "",
+            remarks: "",
+            date: new Date().toLocaleDateString(),
+            lineItems,
+            logoBase64: null,
+            withImages: true,
+          });
+        }
       }
     } catch (err) {
       console.error("PDF generation failed:", err);
@@ -68,27 +82,15 @@ export default function CartDrawer({
     }
   };
 
-
-  // Prevent background scrolling when cart is open
   useEffect(() => {
     setMounted(true);
-    if (isOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
-    return () => {
-      document.body.style.overflow = "";
-    };
   }, [isOpen]);
 
   if (!mounted) return null;
 
-  // Calculate totals
   const totalItems = cart.length;
   const totalWeight = cart.reduce((sum, item) => sum + (item.grossWeight || 0), 0);
 
-  // Group by metal type for summary info
   const metalSummary = cart.reduce((acc: { [key: string]: number }, item) => {
     const key = item.metalType || "Other";
     acc[key] = (acc[key] || 0) + 1;
@@ -96,51 +98,26 @@ export default function CartDrawer({
   }, {});
 
   return (
-    <>
-      {/* Backdrop overlay */}
-      <div
-        className={`fixed inset-0 bg-black/60 backdrop-blur-xs z-50 transition-opacity duration-300 ${isOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-          }`}
-        onClick={onClose}
-      />
-
-      {/* Cart Slider Panel */}
-      <div
-        className={`fixed right-0 top-0 h-full w-full sm:w-115 bg-card border-l border-border shadow-[0_0_50px_rgba(0,0,0,0.4)] z-50 flex flex-col transition-transform duration-300 ease-out transform ${isOpen ? "translate-x-0" : "translate-x-full"
-          }`}
-      >
-        {/* Drawer Header */}
-        <div className="p-6 border-b border-border flex items-center justify-between bg-muted/10">
+    <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <SheetContent side="right" className="w-full sm:w-115 p-0 flex flex-col">
+        <SheetHeader className="p-6 border-b border-border bg-muted/10">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary border border-primary/20">
               <ShoppingBag className="h-4 w-4" />
             </div>
             <div>
-              <h2 className="font-serif text-lg font-bold uppercase tracking-wider text-foreground">
+              <SheetTitle className="font-serif text-lg font-bold uppercase tracking-wider text-foreground">
                 Quotation Cart
-              </h2>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-semibold mt-0.5">
+              </SheetTitle>
+              <SheetDescription className="text-[10px] text-muted-foreground uppercase tracking-widest font-semibold mt-0.5">
                 {totalItems} {totalItems === 1 ? "Item" : "Items"} Selected
-              </p>
+              </SheetDescription>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {/* Removed DropdownMenu to fix mobile closing issue. Buttons are now in the footer. */}
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-1.5 rounded-lg border border-border hover:bg-accent text-muted-foreground hover:text-foreground transition-all duration-200"
-              title="Close Drawer"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
+        </SheetHeader>
 
-        {/* Scrollable Cart Items List */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {cart.length === 0 ? (
-            /* Empty State */
             <div className="h-full flex flex-col items-center justify-center text-center py-20">
               <div className="w-16 h-16 bg-muted/30 border border-border/80 rounded-2xl flex items-center justify-center mb-4 text-muted-foreground/60 shadow-[inset_0_0_15px_rgba(0,0,0,0.05)]">
                 <ShoppingBag className="h-7 w-7" strokeWidth={1.5} />
@@ -160,13 +137,11 @@ export default function CartDrawer({
               </Button>
             </div>
           ) : (
-            /* Cart Items List */
             cart.map((item, index) => (
               <div
                 key={`${item.designNumber}-${index}`}
                 className="group flex gap-4 p-3 bg-muted/20 border border-border/80 rounded-2xl hover:border-primary/30 transition-all duration-300 hover:bg-muted/30"
               >
-                {/* Item Image */}
                 <div className="w-20 h-20 bg-background/50 rounded-xl border border-border flex items-center justify-center p-2 shrink-0 relative overflow-hidden">
                   {item.imageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -180,7 +155,6 @@ export default function CartDrawer({
                   )}
                 </div>
 
-                {/* Item Details */}
                 <div className="flex-1 flex flex-col min-w-0 justify-between py-0.5">
                   <div>
                     <div className="flex items-start justify-between gap-2">
@@ -217,7 +191,6 @@ export default function CartDrawer({
           )}
         </div>
 
-        {/* Drawer Footer Summary */}
         {cart.length > 0 && (
           <div className="p-6 border-t border-border bg-muted/10 space-y-4">
             <div className="space-y-2.5">
@@ -230,7 +203,6 @@ export default function CartDrawer({
                 <span className="font-semibold text-foreground font-mono">{totalWeight.toFixed(3)}g</span>
               </div>
 
-              {/* Metal types breakdown */}
               {Object.keys(metalSummary).length > 0 && (
                 <div className="pt-2 flex flex-wrap gap-2">
                   {Object.entries(metalSummary).map(([metal, count]) => (
@@ -247,7 +219,7 @@ export default function CartDrawer({
 
             <Separator className="bg-border" />
 
-            <div className="flex flex-wrap sm:flex-nowrap gap-2 sm:gap-3">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3">
               <Button
                 type="button"
                 variant="outline"
@@ -272,10 +244,18 @@ export default function CartDrawer({
               >
                 {isGeneratingPDF ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />} Sales PDF
               </Button>
+              <Button
+                type="button"
+                disabled={isGeneratingPDF}
+                onClick={() => handleDownloadPDF("production")}
+                className="flex-1 min-w-30 h-11 bg-primary text-primary-foreground hover:bg-primary/95 text-[10px] font-bold uppercase tracking-wider rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-[0_4px_15px_rgba(197,160,89,0.3)] hover:shadow-[0_6px_20px_rgba(197,160,89,0.4)]"
+              >
+                {isGeneratingPDF ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />} Production PDF
+              </Button>
             </div>
           </div>
         )}
-      </div>
-    </>
+      </SheetContent>
+    </Sheet>
   );
 }
