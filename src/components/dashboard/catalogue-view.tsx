@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, startTransition } from "react";
 import { Search, ChevronUp, SlidersHorizontal, ChevronLeft, ChevronRight, Loader2, AlertCircle, RefreshCw, ShoppingCart, ImageOff } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import QRCode from "qrcode";
+import FilterDrawer, { FilterState } from "./filter-drawer";
 
 function StaticQR({ sku }: { sku: string }) {
   const [src, setSrc] = useState("");
@@ -84,6 +85,14 @@ export default function CatalogueView({ cart = [], onToggleCart }: CatalogueView
   // "ALL" shows everything; otherwise maps straight to the itemStatus enum
   const [itemStatus, setItemStatus] = useState<"ALL" | "CATALOGUE" | "INSTOCK">("ALL");
 
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [filters, setFilters] = useState<FilterState>({
+    itemType: "",
+    collectionLine: "",
+    metalPurity: "",
+    metalType: "",
+  });
+
   // Debounce search: wait 600 ms after user stops typing before fetching
   useEffect(() => {
     const t = setTimeout(() => {
@@ -94,7 +103,7 @@ export default function CatalogueView({ cart = [], onToggleCart }: CatalogueView
   }, [searchQuery]);
 
   // Fetch from /api/catalog whenever page / search / status change
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (abortSignal?: AbortSignal) => {
     setIsLoading(true);
     setError(null);
     try {
@@ -104,8 +113,12 @@ export default function CatalogueView({ cart = [], onToggleCart }: CatalogueView
       });
       if (debouncedSearch) params.set("search", debouncedSearch);
       if (itemStatus !== "ALL") params.set("itemStatus", itemStatus);
+      if (filters.itemType) params.set("itemType", filters.itemType);
+      if (filters.collectionLine) params.set("collectionLine", filters.collectionLine);
+      if (filters.metalPurity) params.set("metalPurity", filters.metalPurity);
+      if (filters.metalType) params.set("metalType", filters.metalType);
 
-      const res = await fetch(`/api/catalog?${params}`);
+      const res = await fetch(`/api/catalog?${params}`, { signal: abortSignal });
       const data: CatalogApiResponse = await res.json();
 
       if (!res.ok || data.error) {
@@ -116,15 +129,24 @@ export default function CatalogueView({ cart = [], onToggleCart }: CatalogueView
       setTotalPages(data.pagination?.totalPages || 1);
       setTotalItems(data.pagination?.total || 0);
     } catch (err: any) {
-      setError(err.message || "Failed to load catalogue data.");
-      setItems([]);
+      if (err.name !== "AbortError") {
+        setError(err.message || "Failed to load catalogue data.");
+        setItems([]);
+      }
     } finally {
-      setIsLoading(false);
+      // Don't turn off loading spinner if we aborted, a new request is taking over
+      if (!abortSignal?.aborted) {
+        setIsLoading(false);
+      }
     }
-  }, [currentPage, debouncedSearch, itemStatus]);
+  }, [currentPage, debouncedSearch, itemStatus, filters]);
 
   useEffect(() => {
-    fetchData();
+    const controller = new AbortController();
+    fetchData(controller.signal);
+    return () => {
+      controller.abort();
+    };
   }, [fetchData]);
 
   return (
@@ -165,18 +187,37 @@ export default function CatalogueView({ cart = [], onToggleCart }: CatalogueView
           <Button
             variant="outline" size="icon"
             className="h-9 w-9 border-border text-muted-foreground hover:bg-accent hover:text-foreground transition-all"
-            onClick={fetchData}
+            onClick={() => fetchData()}
           >
             <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
           </Button>
           <Button
             variant="outline" size="icon"
+            onClick={() => setIsFilterOpen(true)}
             className="h-9 w-9 border-border text-muted-foreground hover:bg-accent hover:text-foreground transition-all"
           >
             <SlidersHorizontal className="h-4 w-4" />
           </Button>
         </div>
       </div>
+
+      <FilterDrawer
+        isOpen={isFilterOpen}
+        onClose={() => setIsFilterOpen(false)}
+        filters={filters}
+        onApplyFilters={(f) => { 
+          startTransition(() => {
+            setFilters(f); 
+            setCurrentPage(1); 
+          });
+        }}
+        onResetFilters={() => { 
+          startTransition(() => {
+            setFilters({ itemType: "", collectionLine: "", metalPurity: "", metalType: "" }); 
+            setCurrentPage(1); 
+          });
+        }}
+      />
 
       {/* ── ERROR BANNER ────────────────────────────────────────────────────── */}
       {error && (
@@ -186,7 +227,7 @@ export default function CatalogueView({ cart = [], onToggleCart }: CatalogueView
             <p className="font-semibold">Could not load catalog</p>
             <p className="text-xs mt-0.5 opacity-80">{error}</p>
           </div>
-          <Button size="sm" variant="outline" onClick={fetchData} className="ml-auto shrink-0 border-destructive/40 text-destructive hover:bg-destructive/10">
+          <Button size="sm" variant="outline" onClick={() => fetchData()} className="ml-auto shrink-0 border-destructive/40 text-destructive hover:bg-destructive/10">
             Retry
           </Button>
         </div>

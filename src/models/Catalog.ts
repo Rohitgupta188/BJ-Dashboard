@@ -165,6 +165,11 @@ CatalogSchema.index(
   { collation: CATALOG_COLLATION, name: "idx_designNumber_imageUrl_ci" }
 );
 
+CatalogSchema.index({ itemType: 1 });
+CatalogSchema.index({ collectionLine: 1 });
+CatalogSchema.index({ metalPurity: 1 });
+CatalogSchema.index({ metalType: 1 });
+
 const Catalog =
   (models.Catalog as mongoose.Model<ICatalog>) ||
   model<ICatalog>("Catalog", CatalogSchema);

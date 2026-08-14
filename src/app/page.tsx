@@ -1,12 +1,11 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect, useCallback } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Sidebar from "@/components/layout/sidebar";
 import Navbar from "@/components/layout/navbar";
-import CatalogueView, { CatalogueItem } from "@/components/dashboard/catalogue-view";
-import QuotationsView from "@/components/dashboard/quotations-view";
+import CatalogueView from "@/components/dashboard/catalogue-view";
+import QuotationsView from "@/components/dashboard/quotation/quotations-view";
 import SalesQuotationView from "@/components/dashboard/sales-quotation-view";
 import OtherViews from "@/components/dashboard/other-views";
 import CustomerView from "@/components/dashboard/customer-view";
@@ -16,120 +15,65 @@ import SettingsView from "@/components/dashboard/settings-view";
 import { Loader2, Home, FileText, ScanLine, ScanBarcode, User, Settings, UserCheck, BookOpen } from "lucide-react";
 import CatalogImportPage from "@/components/dashboard/import-product";
 import { ScannerProvider, useScannerContext } from "@/components/scanner-provider";
-
-interface UserInfo {
-  id: string;
-  username: string;
-  email: string;
-  role: "admin" | "employee";
-}
+import { useAuthRedirect } from "@/hooks/useAuthRedirect";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
+import type { UserInfo } from "@/types";
+import type { CatalogItem } from "@/types";
 
 function DashboardContent() {
-  const router = useRouter();
-  const [activeTab, setActiveTab]   = useState("Quotations");
-  const [cart, setCart]             = useState<CatalogueItem[]>([]);
-  const [cartLoaded, setCartLoaded] = useState(false);
-  const [isCartOpen, setIsCartOpen] = useState(false);
-  const [user, setUser]             = useState<UserInfo | null>(null);
+  const [activeTab, setActiveTab]         = useState("Quotations");
+  const [isCartOpen, setIsCartOpen]       = useState(false);
+  const [user, setUser]                   = useState<UserInfo | null>(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);  // ← mobile sidebar
-  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [touchStart, setTouchStart]       = useState<number | null>(null);
 
-  // Close sidebar when tab changes (mobile UX)
+  // ── Cart persisted to localStorage ───────────────────────────────────────
+  const [cart, setCart] = useLocalStorage<CatalogItem[]>("dashboard_cart", []);
+
+  // ── Auth redirect (replaces inline fetch + window.fetch monkey-patch) ─────
+  useAuthRedirect({
+    onAuthenticated: useCallback((u: UserInfo) => setUser(u), []),
+    onSettled:       useCallback(() => setIsLoadingAuth(false), []),
+  });
+
+  // ── Close sidebar on tab change (mobile UX) ───────────────────────────────
   useEffect(() => {
     setIsSidebarOpen(false);
   }, [activeTab]);
 
-  // Load cart from localStorage
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("dashboard_cart");
-      if (stored) {
-        try { setCart(JSON.parse(stored)); } catch { /* ignore */ }
-      }
-      setCartLoaded(true);
-    }
-  }, []);
-
-  // Persist cart
-  useEffect(() => {
-    if (cartLoaded && typeof window !== "undefined") {
-      localStorage.setItem("dashboard_cart", JSON.stringify(cart));
-    }
-  }, [cart, cartLoaded]);
-
   const { lastScannedSku } = useScannerContext();
 
-  // Auto-switch to Sales tab on scan (SSE push)
+  // ── Auto-switch to Sales tab when scanner fires ───────────────────────────
   useEffect(() => {
     if (lastScannedSku) setActiveTab("Sales");
   }, [lastScannedSku]);
 
-  // Auto-switch to Sales tab if navigated back from the scanner page
+  // ── Auto-switch to Sales tab if navigated from scanner page ──────────────
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      if (params.has("scanSku")) {
-        setActiveTab("Sales");
-      }
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("scanSku")) {
+      setActiveTab("Sales");
     }
   }, []);
 
-    // Global Fetch Interceptor for 401s
-  useEffect(() => {
-    const originalFetch = window.fetch;
-    window.fetch = async function (...args) {
-      const response = await originalFetch.apply(this, args);
-      if (response.status === 401) {
-        // Only redirect if we are not already on the login page (or trying to fetch auth/me itself inside a loop)
-        const url = args[0] as string;
-        if (!url.includes("/api/auth/me")) {
-           router.push("/login");
-        }
-      }
-      return response;
-    };
-    return () => {
-      window.fetch = originalFetch;
-    };
-  }, [router]);
-
-  // Auth check
-  useEffect(() => {
-    async function checkAuth() {
-      try {
-        const res = await fetch("/api/auth/me");
-        if (!res.ok) { router.push("/login"); return; }
-        const json = await res.json();
-        if (json.success && json.data?.user) {
-          setUser(json.data.user);
-        } else {
-          router.push("/login");
-        }
-      } catch {
-        router.push("/login");
-      } finally {
-        setIsLoadingAuth(false);
-      }
-    }
-    checkAuth();
-  }, [router]);
-
+  // ── Logout ────────────────────────────────────────────────────────────────
   const handleLogout = async () => {
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } finally {
-      router.push("/login");
+      window.location.replace("/login");
     }
   };
 
-  const handleToggleCart = (item: CatalogueItem) => {
+  // ── Cart helpers ──────────────────────────────────────────────────────────
+  const handleToggleCart = useCallback((item: CatalogItem) => {
     setCart(prev =>
       prev.some(c => c.designNumber === item.designNumber)
         ? prev.filter(c => c.designNumber !== item.designNumber)
         : [...prev, item]
     );
-  };
+  }, [setCart]);
 
   // ── Swipe to open sidebar ─────────────────────────────────────────────────
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -138,20 +82,16 @@ function DashboardContent() {
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (touchStart === null) return;
-    const currentTouch = e.targetTouches[0].clientX;
-    const diff = currentTouch - touchStart;
-
-    // If swiped right from the left edge (started within 40px of left edge)
+    const diff = e.targetTouches[0].clientX - touchStart;
     if (diff > 50 && touchStart < 40) {
       setIsSidebarOpen(true);
-      setTouchStart(null); // prevent multiple triggers
+      setTouchStart(null);
     }
   };
 
-  const handleTouchEnd = () => {
-    setTouchStart(null);
-  };
+  const handleTouchEnd = () => setTouchStart(null);
 
+  // ── View router ───────────────────────────────────────────────────────────
   const renderActiveView = () => {
     switch (activeTab) {
       case "Products":
@@ -174,6 +114,7 @@ function DashboardContent() {
     }
   };
 
+  // ── Loading screen ────────────────────────────────────────────────────────
   if (isLoadingAuth) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-background text-foreground">
@@ -187,7 +128,7 @@ function DashboardContent() {
 
   return (
     <TooltipProvider>
-      <div 
+      <div
         className="flex h-screen bg-background text-foreground font-sans overflow-hidden"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -225,7 +166,7 @@ function DashboardContent() {
               <Home className="h-5.5 w-5.5 group-hover:scale-110 transition-transform" strokeWidth={2.5} />
               <span className="text-[10px] font-bold">Home</span>
             </button>
-            
+
             <button onClick={() => setActiveTab("Catalogue")} className={`flex flex-col items-center justify-center gap-1 p-2 min-w-16 transition-colors group ${activeTab === "Catalogue" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
               <BookOpen className="h-5.5 w-5.5 group-hover:scale-110 transition-transform" strokeWidth={2.5} />
               <span className="text-[10px] font-bold">Catalog</span>
@@ -242,7 +183,7 @@ function DashboardContent() {
               <UserCheck className="h-5.5 w-5.5 group-hover:scale-110 transition-transform" strokeWidth={2.5} />
               <span className="text-[10px] font-bold">Customer</span>
             </button>
-            
+
             <button onClick={() => setActiveTab("Settings")} className={`flex flex-col items-center justify-center gap-1 p-2 min-w-16 transition-colors group ${activeTab === "Settings" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>
               <User className="h-5.5 w-5.5 group-hover:scale-110 transition-transform" strokeWidth={2.5} />
               <span className="text-[10px] font-bold">Profile</span>

@@ -74,7 +74,7 @@ export const PATCH = withAuth(async (
     const updated = await Catalog.findOneAndUpdate(
       { sku: decodeURIComponent(sku) },
       { $set: body },
-      { new: true }
+      { returnDocument: "after" }
     );
 
     if (!updated) {
