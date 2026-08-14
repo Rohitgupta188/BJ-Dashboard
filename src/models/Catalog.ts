@@ -11,7 +11,6 @@ export interface ICatalog extends Document {
   storageProvider: "backblaze";
   storagePath: string;
   imageUrl: string;
-  imageKitFileId: string;
   imageMd5?: string;
 
   itemStatus: "CATALOGUE" | "INSTOCK";
@@ -75,10 +74,6 @@ const CatalogSchema = new Schema<ICatalog>(
     },
 
     imageUrl: {
-      type: String,
-    },
-
-    imageKitFileId: {
       type: String,
     },
 

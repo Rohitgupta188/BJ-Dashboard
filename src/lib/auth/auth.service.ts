@@ -136,20 +136,17 @@ export function sanitizeUser(user: IUser) {
 }
 
 export async function rotateRefreshToken(refreshToken: string): Promise<AuthResult> {
-  console.log("rotateRefreshToken called");
   await connectToDatabase();
-  
+
   const refreshResult = await verifyToken(refreshToken, "refresh");
   if (!refreshResult.ok) {
-    console.log("rotateRefreshToken failed: Invalid refresh token");
     await clearAuthCookies();
     return { ok: false, error: "Invalid refresh token", status: 401 };
   }
 
   const { sub, email, username, role, sid } = refreshResult.payload;
-  
+
   if (!sid) {
-    console.log("rotateRefreshToken failed: No session ID in token");
     await clearAuthCookies();
     return { ok: false, error: "Session invalid", status: 401 };
   }
@@ -157,15 +154,13 @@ export async function rotateRefreshToken(refreshToken: string): Promise<AuthResu
   const user = await User.findById(sub).select("+sessions");
 
   if (!user || !user.sessions) {
-    console.log("rotateRefreshToken failed: User not found");
     await clearAuthCookies();
     return { ok: false, error: "Session expired. Please log in again.", status: 401 };
   }
 
   const session = user.sessions.find(s => s.sessionId === sid);
-  
+
   if (!session) {
-    console.log("rotateRefreshToken failed: Session not found (already revoked)");
     await clearAuthCookies();
     return { ok: false, error: "Session expired. Please log in again.", status: 401 };
   }
@@ -180,11 +175,10 @@ export async function rotateRefreshToken(refreshToken: string): Promise<AuthResu
       session.refreshTokenRotatedAt &&
       Date.now() - new Date(session.refreshTokenRotatedAt).getTime() < 60000
     ) {
-      console.log("rotateRefreshToken: Grace period active for session", sid);
       isGracePeriod = true;
     } else {
-      console.log("rotateRefreshToken failed: Hash mismatch for session", sid);
-      // Token theft detected on this specific session. Revoke it.
+      // Token reuse outside grace period → possible theft. Revoke this session.
+      console.warn("[auth] Refresh token reuse detected — revoking session.");
       user.sessions = user.sessions.filter(s => s.sessionId !== sid);
       await user.save();
       await clearAuthCookies();
@@ -199,13 +193,11 @@ export async function rotateRefreshToken(refreshToken: string): Promise<AuthResu
     session.lastRefreshTokenHash = incomingHash;
     session.refreshTokenRotatedAt = new Date();
   }
-  
+
   session.refreshTokenHash = await hashToken(newRefreshToken);
-  
-  // Mark the sessions array as modified so mongoose saves the nested changes
-  user.markModified('sessions');
+
+  user.markModified("sessions");
   await user.save();
 
-  console.log("rotateRefreshToken succeeded for session", sid);
   return { ok: true, user, accessToken: newAccessToken, refreshToken: newRefreshToken, sid };
 }

@@ -4,6 +4,9 @@ import Quotation from "@/models/Quotation";
 import { withAuth } from "@/lib/auth";
 import { handleRoute } from "@/lib/api-response";
 
+const escapeRegex = (text: string): string =>
+  text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+
 function generateQuotationNo(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "BJ-";
@@ -25,10 +28,11 @@ export const GET = withAuth(async (req: NextRequest, { user }: any) => {
     const filter: any = {};
 
     if (search) {
+      const safeSearch = escapeRegex(search);
       filter.$or = [
-        { quotationNo:  { $regex: search, $options: "i" } },
-        { companyName:  { $regex: search, $options: "i" } },
-        { contactName:  { $regex: search, $options: "i" } },
+        { quotationNo: { $regex: safeSearch, $options: "i" } },
+        { companyName: { $regex: safeSearch, $options: "i" } },
+        { contactName: { $regex: safeSearch, $options: "i" } },
       ];
     }
 

@@ -60,6 +60,16 @@ export const DELETE = withAuth(async (
   }
 }, { requireRole: "admin" });
 
+// Fields that admin is allowed to update via PATCH.
+// Whitelist prevents accidental/malicious writes to system fields
+// like imageMd5, storagePath, storageProvider, _id, etc.
+const PATCHABLE_FIELDS = new Set([
+  "itemStatus", "itemType", "isCatalog", "isInstock",
+  "grossWeight", "netWeight", "stoneWeight",
+  "collectionLine", "metalType", "metalPurity",
+  "imageName", "imageUrl",
+]);
+
 export const PATCH = withAuth(async (
   request: NextRequest,
   context: AuthenticatedRequest & { params: Promise<{ sku: string }> }
@@ -69,11 +79,24 @@ export const PATCH = withAuth(async (
     if (!sku) return NextResponse.json({ error: "sku required" }, { status: 400 });
 
     const body = await request.json();
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+    }
+
+    // Strip any field not on the whitelist
+    const safeUpdate: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(body)) {
+      if (PATCHABLE_FIELDS.has(key)) safeUpdate[key] = val;
+    }
+    if (Object.keys(safeUpdate).length === 0) {
+      return NextResponse.json({ error: "No patchable fields provided." }, { status: 400 });
+    }
+
     await connectToDatabase();
-    
+
     const updated = await Catalog.findOneAndUpdate(
       { sku: decodeURIComponent(sku) },
-      { $set: body },
+      { $set: safeUpdate },
       { returnDocument: "after" }
     );
 

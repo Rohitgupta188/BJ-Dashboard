@@ -35,7 +35,7 @@ export const PATCH = withAuth(async (req: NextRequest, { params }: { params: Pro
     const quotation = await Quotation.findOneAndUpdate(
       { quotationNo: id },
       { $set: updateFields },
-      { new: true }
+      { returnDocument: "after" }
     ).lean();
 
     if (!quotation) {

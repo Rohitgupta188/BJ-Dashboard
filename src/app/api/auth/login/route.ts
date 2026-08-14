@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { userLoginSchema } from "@/lib/validation";
 import { setAuthCookies } from "@/lib/auth";
 import { loginUser, sanitizeUser } from "@/lib/auth/auth.service";
-import { handleRoute, success, unauthorized, validationError, notFound } from "@/lib/api-response";
+import { handleRoute, success, unauthorized, validationError } from "@/lib/api-response";
 import { checkLoginRateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
@@ -27,16 +27,9 @@ export async function POST(req: NextRequest) {
     const result = await loginUser(parsed.data);
 
     if (!result.ok) {
-      
-      if (result.error === "USER_NOT_FOUND") {
-        return notFound("User not found");
-      }
-
-      if (result.error === "INVALID_PASSWORD") {
-        return unauthorized("Invalid email or password");
-      }
-
-      return unauthorized(result.error || "Login failed");
+      // Always return the same message regardless of whether the email exists.
+      // Returning a distinct 404 for "USER_NOT_FOUND" leaks account enumeration.
+      return unauthorized("Invalid email or password");
     }
 
     await setAuthCookies(result.accessToken, result.refreshToken);

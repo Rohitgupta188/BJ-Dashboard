@@ -37,55 +37,46 @@ export function withAuth<T = Record<string, unknown>>(
       return handler(req, { ...context, user: result.payload });
     }
 
-    const shouldRefresh = !accessToken || (result && !result.ok);
-    if (shouldRefresh) {
-      const refreshToken = await getRefreshToken();
+    // Access token is missing or invalid — attempt refresh.
+    const refreshToken = await getRefreshToken();
 
-      if (!refreshToken) {
-        const response = NextResponse.json(
-          { error: "Session expired. Please log in again." },
-          { status: 401 }
-        );
-        await clearAuthCookies(response);
-        return response;
-      }
-
-      const result = await rotateRefreshToken(refreshToken);
-
-      if (!result.ok) {
-        const response = NextResponse.json({ error: result.error }, { status: result.status });
-        await clearAuthCookies(response);
-        return response;
-      }
-
-      if (options?.requireRole && result.user.role !== options.requireRole) {
-        return NextResponse.json(
-          { error: "Forbidden: Insufficient permissions" },
-          { status: 403 }
-        );
-      }
-
-      const response = await handler(req, {
-        ...context,
-        user: { 
-          sub: result.user._id.toString(), 
-          email: result.user.email, 
-          username: result.user.username, 
-          role: result.user.role, 
-          type: "access",
-          sid: result.sid
-        },
-      });
-
-      await setAuthCookies(result.accessToken, result.refreshToken, response);
-
+    if (!refreshToken) {
+      const response = NextResponse.json(
+        { error: "Session expired. Please log in again." },
+        { status: 401 }
+      );
+      await clearAuthCookies(response);
       return response;
-
-
     }
 
-    const response = NextResponse.json({ error: "Invalid or missing token" }, { status: 401 });
-    await clearAuthCookies(response);
+    const refreshResult = await rotateRefreshToken(refreshToken);
+
+    if (!refreshResult.ok) {
+      const response = NextResponse.json({ error: refreshResult.error }, { status: refreshResult.status });
+      await clearAuthCookies(response);
+      return response;
+    }
+
+    if (options?.requireRole && refreshResult.user.role !== options.requireRole) {
+      return NextResponse.json(
+        { error: "Forbidden: Insufficient permissions" },
+        { status: 403 }
+      );
+    }
+
+    const response = await handler(req, {
+      ...context,
+      user: {
+        sub:      refreshResult.user._id.toString(),
+        email:    refreshResult.user.email,
+        username: refreshResult.user.username,
+        role:     refreshResult.user.role,
+        type:     "access",
+        sid:      refreshResult.sid,
+      },
+    });
+
+    await setAuthCookies(refreshResult.accessToken, refreshResult.refreshToken, response);
     return response;
   };
 }

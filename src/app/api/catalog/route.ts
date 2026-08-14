@@ -51,7 +51,8 @@ export const GET = withAuth(async (request: NextRequest) => {
     };
 
     if (requireImage === "true") {
-      filter.imageUrl = { $exists: true, $ne: null };
+      // Exclude null, missing, and empty-string imageUrls
+      filter.imageUrl = { $exists: true, $nin: [null, ""] };
     }
 
     // Anchored prefix regex search
