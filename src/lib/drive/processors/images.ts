@@ -4,6 +4,7 @@ import { uploadBufferToBackblaze, getContentType } from "@/lib/backblaze";
 import Catalog, { CATALOG_COLLATION } from "@/models/Catalog";
 import { deleteFromImageIndex, upsertImageIndex } from "@/lib/drive/imageIndex";
 import { withDriveRetry } from "@/lib/drive/retry";
+import ImageSyncFailure from "@/models/ImageSyncFailure";
 import { drive_v3 } from "googleapis";
 
 export const IMAGE_MIME_TYPES = new Set([
@@ -97,11 +98,58 @@ export async function processImageFile(
   const buffer      = Buffer.from(downloadRes.data as ArrayBuffer);
   const contentType = getContentType(fileName);
 
-  const { key: objectKey } = await uploadBufferToBackblaze(
-    buffer,
-    fileName,
-    contentType
-  );
+  let objectKey: string;
+  try {
+    const uploadRes = await uploadBufferToBackblaze(
+      buffer,
+      fileName,
+      contentType
+    );
+    objectKey = uploadRes.key;
+  } catch (err: any) {
+    // Retries exhausted for Backblaze. Persist the failure state.
+    const errorMessage = err?.message || String(err);
+    const errorType = err?.name || err?.code || "UnknownUploadError";
+
+    try {
+      const existing = await ImageSyncFailure.findOne({ fileId, operation: "IMAGE_UPLOAD" });
+      const attempts = existing ? existing.recoveryAttempts + 1 : 0;
+      const isExhausted = attempts >= 5;
+      const backoffMs = isExhausted ? 0 : Math.pow(2, attempts) * 5 * 60 * 1000; // 5m, 10m, 20m, 40m...
+
+      await ImageSyncFailure.findOneAndUpdate(
+        { fileId, operation: "IMAGE_UPLOAD" },
+        {
+          $set: {
+            fileName,
+            mimeType,
+            parentFolderId: file.parents?.[0] || "",
+            errorType,
+            errorMessage,
+            status: isExhausted ? "NEEDS_REVIEW" : "PENDING",
+            nextRetryAt: isExhausted ? undefined : new Date(Date.now() + backoffMs),
+            recoveryAttempts: attempts,
+            lastAttemptAt: new Date(),
+            lockedUntil: undefined, // Release lock if it was held by recovery cron
+          },
+        },
+        { upsert: true }
+      );
+      console.warn(`[drive/images] ${fileName} → B2 Upload Failed. Durably persisted to ImageSyncFailure (attempts: ${attempts}).`);
+      
+      // Throw a specific error so callers (processChanges or recovery cron) know it failed but was persisted safely.
+      const handledErr = new Error("UPLOAD_FAILED_BUT_PERSISTED");
+      (handledErr as any).isHandled = true;
+      throw handledErr;
+    } catch (dbErr: any) {
+      if (dbErr.isHandled) throw dbErr; // Re-throw the handled error
+      
+      console.error(`[drive/images] ${fileName} → FATAL: B2 Upload failed AND failed to persist ImageSyncFailure!`);
+      const fatalErr = new Error(`FATAL_PERSISTENCE_FAILURE: ${errorMessage}`);
+      (fatalErr as any).isFatal = true;
+      throw fatalErr;
+    }
+  }
 
   const imageUrl = `${IMAGEKIT_URL_ENDPOINT.replace(/\/$/, "")}/${objectKey}`;
 
