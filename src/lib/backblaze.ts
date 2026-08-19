@@ -1,4 +1,5 @@
 import { S3Client, PutObjectCommand, HeadObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { NodeHttpHandler } from "@smithy/node-http-handler";
 import path from "path";
 
 // ─── B2 retry ─────────────────────────────────────────────────────────────────
@@ -17,12 +18,26 @@ async function withB2Retry<T>(
       return await fn();
     } catch (err: any) {
       const status = err?.$metadata?.httpStatusCode ?? err?.statusCode;
-      const retryable = status === 429 || status === 500 || status === 503;
+      const retryable =
+        status === 429 ||
+        status === 500 ||
+        status === 503 ||
+        err?.name === "TimeoutError" ||
+        err?.name === "AbortError" ||
+        err?.code === "ECONNRESET" ||
+        err?.code === "ETIMEDOUT";
+
+      const tag = label ? `[${label}] ` : "";
+      
+      // Log the actual error shape during the first controlled timeout test
+      console.warn(
+        `${tag}B2 error shape: name=${err?.name} code=${err?.code} message="${err?.message}" httpStatus=${status}`
+      );
+
       if (!retryable || n >= retries) throw err;
       const base  = Math.min(Math.pow(2, n) * 1_000, 32_000);
       const delay = base + Math.floor(Math.random() * 1_000);
-      const tag   = label ? `[${label}] ` : "";
-      console.warn(`${tag}B2 error (${status}) — retry ${n + 1}/${retries} in ${delay}ms`);
+      console.warn(`${tag}B2 transient error (retryable=${retryable}) — retry ${n + 1}/${retries} in ${delay}ms`);
       await new Promise((r) => setTimeout(r, delay));
       n++;
     }
@@ -47,6 +62,11 @@ for (const key of REQUIRED_ENV) {
 
 // ─── S3-compatible client (Backblaze B2) ─────────────────────────────────────
 
+const requestHandler = new NodeHttpHandler({
+  connectionTimeout: 5000,
+  requestTimeout: 60000,
+});
+
 export const s3Client = new S3Client({
   endpoint: process.env.B2_ENDPOINT,
   region: process.env.B2_REGION,
@@ -56,6 +76,7 @@ export const s3Client = new S3Client({
   },
   // Required for Backblaze's S3-compatible API
   forcePathStyle: true,
+  requestHandler,
 });
 
 export const BUCKET_NAME = process.env.B2_BUCKET_NAME as string;

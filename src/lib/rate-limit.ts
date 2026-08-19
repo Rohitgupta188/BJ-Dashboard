@@ -30,3 +30,24 @@ export async function checkLoginRateLimit(ip: string): Promise<boolean> {
     return true; 
   }
 }
+
+export const globalRateLimiter = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(100, "1 m"),
+      analytics: true,
+      prefix: "@upstash/ratelimit/global",
+    })
+  : null;
+
+export async function checkGlobalRateLimit(ip: string): Promise<boolean> {
+  if (!globalRateLimiter) return true;
+
+  try {
+    const { success } = await globalRateLimiter.limit(ip);
+    return success;
+  } catch (err) {
+    console.warn("Global rate limit check failed, allowing request. Error:", err);
+    return true; 
+  }
+}

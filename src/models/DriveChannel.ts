@@ -10,6 +10,7 @@ export interface IDriveChannel {
   pendingPageToken?: string;     
   pendingChangeIndex?: number;   
   processingLockedAt?: Date;     
+  renewLockedAt?: Date;
   pendingWork?: boolean;
   lastModifiedTime?: Map<string, string>;
   lastExcelContentHash?: Map<string, string>;
@@ -27,6 +28,7 @@ const DriveChannelSchema = new Schema<IDriveChannel>(
     pendingPageToken:   { type: String },
     pendingChangeIndex: { type: Number },
     processingLockedAt: { type: Date },
+    renewLockedAt:      { type: Date },
     pendingWork:        { type: Boolean },
     lastModifiedTime:   { type: Map, of: String },
     lastExcelContentHash: { type: Map, of: String },

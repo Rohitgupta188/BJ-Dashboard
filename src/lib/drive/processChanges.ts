@@ -305,7 +305,13 @@ async function _processChanges(
 
       if (!change.fileId) continue;
 
-      await DriveChannel.findByIdAndUpdate("main", { pendingChangeIndex: i });
+      // ── Checkpoint correctness ──────────────────────────────────────────────
+      // We are about to start processing `i`. This means everything before `i`
+      // has finished. We record `i - 1` as our safely completed watermark.
+      // If the function hard-crashes while processing `i`, the DB will still say
+      // we only finished up to `i - 1`. On the next run, we will retry `i`.
+      // (This requires operations to be idempotent, which they are).
+      await DriveChannel.findByIdAndUpdate("main", { pendingChangeIndex: i - 1 });
 
       const tChange = Date.now();
       const { fileId, file } = change;

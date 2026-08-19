@@ -5,7 +5,7 @@ import { connectToDatabase } from "@/lib/db";
 import DriveChannel from "@/models/DriveChannel";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 30;
+export const maxDuration = 300;
 
 const WEBHOOK_URL =
   process.env.DRIVE_WEBHOOK_URL ?? "";
@@ -42,30 +42,54 @@ export async function GET(req: NextRequest) {
   await connectToDatabase();
   const drive = getDriveClient();
 
-  const existing = await DriveChannel.findById("main");
-  if (!existing) {
+  const anyChannel = await DriveChannel.findById("main");
+  if (!anyChannel) {
     return NextResponse.json(
       { error: "No registered channel. Run: npm run register:webhook" },
       { status: 404 }
     );
   }
 
-  const expiresIn = existing.expiresAt.getTime() - Date.now();
-  const daysLeft = Math.floor(expiresIn / (24 * 60 * 60 * 1000));
+  // The 6-minute stale-lock timeout acts as crash recovery if the Vercel
+  // function dies before the finally block executes.
+  // Note: This relies on the assumption that an execution will never hang
+  // for >6 minutes. Since we use `export const maxDuration = 300;`, Vercel
+  // strictly guarantees the process will be killed well before 6 minutes.
+  const lockCutoff = new Date(Date.now() - 6 * 60 * 1000);
+  const existing = await DriveChannel.findOneAndUpdate(
+    {
+      _id: "main",
+      $or: [
+        { renewLockedAt: { $exists: false } },
+        { renewLockedAt: null },
+        { renewLockedAt: { $lt: lockCutoff } },
+      ],
+    },
+    { $set: { renewLockedAt: new Date() } },
+    { returnDocument: "after" }
+  );
 
-  if (expiresIn > RENEW_THRESHOLD_MS) {
-    console.log(`[renew-webhook] Channel healthy — ${daysLeft} day(s) until expiry. Skipping.`);
-    return NextResponse.json({
-      status: "ok",
-      message: `Channel healthy — ${daysLeft} day(s) until expiry. Renewal not needed.`,
-      daysLeft,
-      expiresAt: existing.expiresAt,
-    });
+  if (!existing) {
+    console.log("[renew-webhook] Renewal already in progress by another invocation. Skipping.");
+    return NextResponse.json({ status: "skipped", message: "Renewal already in progress." });
   }
 
-  console.log(`[renew-webhook] Renewing channel (${daysLeft} day(s) until expiry)…`);
-
   try {
+    const expiresIn = existing.expiresAt.getTime() - Date.now();
+    const daysLeft = Math.floor(expiresIn / (24 * 60 * 60 * 1000));
+
+    if (expiresIn > RENEW_THRESHOLD_MS) {
+      console.log(`[renew-webhook] Channel healthy — ${daysLeft} day(s) until expiry. Skipping.`);
+      return NextResponse.json({
+        status: "ok",
+        message: `Channel healthy — ${daysLeft} day(s) until expiry. Renewal not needed.`,
+        daysLeft,
+        expiresAt: existing.expiresAt,
+      });
+    }
+
+    console.log(`[renew-webhook] Renewing channel (${daysLeft} day(s) until expiry)…`);
+
     const newChannelId = randomUUID();
 
     // Register new channel using existing.pageToken so there is zero gap:
@@ -134,17 +158,14 @@ export async function GET(req: NextRequest) {
       daysLeft: Math.floor((newExpiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)),
     });
 
-  } catch (err) {
+  } catch (err: any) {
     const message = err instanceof Error ? err.message : String(err);
-    // Log the full error object so the stack trace appears in Vercel logs.
     console.error("[renew-webhook] ❌ Renewal failed:", err);
 
-    // ── Alert ────────────────────────────────────────────────────────────────
-    // If ALERT_WEBHOOK_URL is set (Slack / Discord / any incoming webhook),
-    // fire a one-way POST so the team is notified immediately instead of
-    // discovering the channel has expired when sync silently stops.
     const alertUrl = process.env.ALERT_WEBHOOK_URL;
     if (alertUrl) {
+      const expiresIn = existing.expiresAt.getTime() - Date.now();
+      const daysLeft = Math.floor(expiresIn / (24 * 60 * 60 * 1000));
       const alertBody = JSON.stringify({
         text: `🚨 *Drive webhook renewal FAILED* — channel may expire in ${daysLeft} day(s).\nError: ${message}\nManually run \`npm run register:webhook\` or check Vercel env vars.`,
       });
@@ -157,10 +178,13 @@ export async function GET(req: NextRequest) {
       } catch (alertErr) {
         console.error("[renew-webhook] Failed to send alert:", alertErr);
       }
-      return NextResponse.json({ error: "Renewal failed", message }, { status: 500 });
-
     }
 
     return NextResponse.json({ error: "Renewal failed", message }, { status: 500 });
+  } finally {
+    // Always release the mutex lock
+    await DriveChannel.findByIdAndUpdate("main", {
+      $unset: { renewLockedAt: "" }
+    }).catch(e => console.error("[renew-webhook] Failed to release lock", e));
   }
 }

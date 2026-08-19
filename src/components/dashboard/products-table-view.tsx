@@ -217,9 +217,14 @@ export default function ProductsTableView({ userRole }: { userRole?: string }) {
     const skuArr = Array.from(selectedSkus);
     setDeletingSkus(new Set(skuArr));
     try {
-      await Promise.all(
-        skuArr.map(sku => fetch(`/api/catalog/${encodeURIComponent(sku)}`, { method: "DELETE" }))
-      );
+      const res = await fetch("/api/catalog/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ skus: skuArr }),
+      });
+      
+      if (!res.ok) throw new Error("Bulk delete failed");
+      
       setSelectedSkus(new Set());
       fetchData();
     } catch {

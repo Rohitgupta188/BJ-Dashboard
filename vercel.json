@@ -2,11 +2,15 @@
   "crons": [
     {
       "path": "/api/cron/renew-webhook",
-      "schedule": "0 9 * * *"
+      "schedule": "30 3 * * *"
     },
     {
       "path": "/api/cron/recover-webhook",
-      "schedule": "0 10 * * *"
+      "schedule": "30 4 * * *"
+    },
+    {
+      "path": "/api/cron/recover-image-failures",
+      "schedule": "30 5 * * *"
     }
   ],
   "functions": {

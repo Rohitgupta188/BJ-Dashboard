@@ -18,16 +18,17 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify, errors as joseErrors } from "jose";
+import { checkGlobalRateLimit } from "@/lib/rate-limit";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const ACCESS_COOKIE  = "access_token";
+const ACCESS_COOKIE = "access_token";
 const REFRESH_COOKIE = "refresh_token";
 
 const PUBLIC_PATHS = [
   "/login",
   "/register",
-  "/scan",  
+  "/scan",
 ];
 
 const PUBLIC_PREFIXES = [
@@ -40,12 +41,16 @@ const PUBLIC_PREFIXES = [
   "/api/auth/register",
   "/api/auth/refresh",
   "/api/auth/logout",
-  "/api/scanner/",
-  "/api/catalog/", 
-  "/api/image-proxy",
-  "/api/network-ip",
-  "/api/drive/",      // Google Drive push notifications — no user session available
+  "/api/drive/webhook", // Specific Drive webhook endpoint (no user session)
+  "/api/cron/",         // Vercel cron endpoints (authenticated via CRON_SECRET)
 ];
+
+const BYPASS_RATE_LIMIT_PATHS = new Set([
+  "/api/drive/webhook",
+  "/api/cron/renew-webhook",
+  "/api/cron/recover-webhook",
+  "/api/cron/recover-image-failures",
+]);
 
 function getSecret(): Uint8Array {
   const secret = process.env.JWT_SECRET;
@@ -70,16 +75,34 @@ async function isTokenValid(token: string): Promise<boolean> {
     if (err instanceof joseErrors.JWTExpired) {
       return false;
     }
-    return false; 
+    return false;
   }
 }
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  if (
+    pathname.startsWith("/api/") &&
+    !BYPASS_RATE_LIMIT_PATHS.has(pathname)
+  ) {
+    const ip =
+      request.headers.get("x-real-ip") ??
+      request.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
+      "127.0.0.1";
+
+    const isAllowed = await checkGlobalRateLimit(ip);
+    if (!isAllowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        { status: 429 }
+      );
+    }
+  }
+
   if (isPublicPath(pathname)) {
     if (pathname === "/login" || pathname === "/register") {
-      const accessToken  = request.cookies.get(ACCESS_COOKIE)?.value;
+      const accessToken = request.cookies.get(ACCESS_COOKIE)?.value;
       const refreshToken = request.cookies.get(REFRESH_COOKIE)?.value;
 
       if (accessToken && (await isTokenValid(accessToken))) {
@@ -92,7 +115,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const accessToken  = request.cookies.get(ACCESS_COOKIE)?.value;
+  const accessToken = request.cookies.get(ACCESS_COOKIE)?.value;
   const refreshToken = request.cookies.get(REFRESH_COOKIE)?.value;
 
   if (!accessToken && !refreshToken) {
