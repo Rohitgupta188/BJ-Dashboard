@@ -6,8 +6,9 @@ import {
   MapPin, Phone, MessageSquare, ChevronDown
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { buildQuotationPDF, PdfQuotationLineItem } from "@/lib/generate-quotation-pdf";
-import { generateCatalogPDF } from "@/lib/generate-pdf";
+import { buildQuotationPDF, PdfQuotationLineItem } from "@/lib/pdf";
+import { generateCatalogPDF } from "@/lib/pdf";
+import { buildProductionPDF } from "@/lib/pdf";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface LineItem {
@@ -62,7 +63,7 @@ export default function QuotationExportModal({ lineItems, onClose, onExported }:
   const [showCustDrop, setShowCustDrop] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [templateStyle, setTemplateStyle] = useState<"sales" | "executive">("sales");
+  const [templateStyle, setTemplateStyle] = useState<"sales" | "executive" | "production">("sales");
   const dropRef = useRef<HTMLDivElement>(null);
 
   // ── Load cached form (except remarks) ─────────────────────────────────────
@@ -210,6 +211,17 @@ export default function QuotationExportModal({ lineItems, onClose, onExported }:
             logoBase64,
             remarks: form.remarks
           }
+        });
+      } else if (templateStyle === "production") {
+        await buildProductionPDF({
+          quotationNo: quotationNo,
+          companyName: form.companyName,
+          contactName: form.contactName,
+          address: form.address,
+          remarks: form.remarks,
+          date: new Date().toLocaleDateString("en-IN"),
+          lineItems: mappedLineItems,
+          logoBase64,
         });
       } else {
         await buildQuotationPDF({
@@ -400,6 +412,11 @@ export default function QuotationExportModal({ lineItems, onClose, onExported }:
                 <input type="radio" name="template" value="executive" checked={templateStyle === "executive"} onChange={() => setTemplateStyle("executive")} className="hidden" />
                 <span className={`text-sm font-bold ${templateStyle === "executive" ? "text-primary" : "text-foreground"}`}>Executive Catalog</span>
                 <span className="text-[10px] text-muted-foreground mt-1">Premium image grid layout</span>
+              </label>
+              <label className={`flex-1 flex flex-col items-center justify-center p-3 border rounded-xl cursor-pointer transition-all ${templateStyle === "production" ? "border-primary bg-primary/10 shadow-[0_0_15px_rgba(197,160,89,0.15)]" : "border-border hover:bg-muted/20"}`}>
+                <input type="radio" name="template" value="production" checked={templateStyle === "production"} onChange={() => setTemplateStyle("production")} className="hidden" />
+                <span className={`text-sm font-bold text-center ${templateStyle === "production" ? "text-primary" : "text-foreground"}`}>Production Job Card</span>
+                <span className="text-[10px] text-muted-foreground mt-1 text-center">10-12 items per page grid</span>
               </label>
             </div>
           </div>

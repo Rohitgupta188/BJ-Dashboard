@@ -4,8 +4,10 @@ import React, { useState, useEffect } from "react";
 import { X, Trash2, Pencil, Download, Plus, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { buildQuotationPDF } from "@/lib/generate-quotation-pdf";
+import { buildQuotationPDF } from "@/lib/pdf";
+import { buildProductionPDF } from "@/lib/pdf";
 import { Checkbox } from "@/components/ui/checkbox";
+import { FileText, Settings } from "lucide-react";
 
 interface QuotationDetailModalProps {
   quotationNo: string;
@@ -149,6 +151,38 @@ export default function QuotationDetailModal({ quotationNo, onClose, onUpdated }
     }
   };
 
+  const handleDownloadProductionPDF = async () => {
+    if (!quotation) return;
+    try {
+      let logoBase64: string | null = null;
+      try {
+        const logoRes = await fetch("/logo.png");
+        if (logoRes.ok) {
+          const logoBlob = await logoRes.blob();
+          logoBase64 = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.onerror = () => resolve(null);
+            reader.readAsDataURL(logoBlob);
+          });
+        }
+      } catch (e) { console.error("Logo fetch failed", e); }
+
+      await buildProductionPDF({
+        quotationNo: quotation.quotationNo,
+        companyName: quotation.companyName,
+        contactName: quotation.contactName,
+        address: quotation.address,
+        remarks: globalRemarks,
+        date: new Date(quotation.date).toLocaleDateString("en-IN"),
+        lineItems: items,
+        logoBase64,
+      });
+    } catch (error) {
+      console.error("Production PDF generation failed:", error);
+    }
+  };
+
   const updateItem = (index: number, field: string, value: any) => {
     const newItems = [...items];
     newItems[index] = { ...newItems[index], [field]: value };
@@ -180,11 +214,14 @@ export default function QuotationDetailModal({ quotationNo, onClose, onUpdated }
 
         {/* Toolbar */}
         <div className="flex items-center justify-between p-4 border-b border-border bg-muted/10 shrink-0">
-          <div className="flex items-center gap-4">
-            <Button variant="outline" size="sm" onClick={handleDownloadPDF} className="gap-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <Button variant="outline" size="sm" onClick={handleDownloadPDF} className="gap-2 border-[#C5A059]/30 text-[#C5A059] hover:bg-[#C5A059]/10 hover:text-[#C5A059]">
               <Download className="h-4 w-4" /> Download PDF
             </Button>
-            <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+            <Button variant="outline" size="sm" onClick={handleDownloadProductionPDF} className="gap-2">
+              <Settings className="h-4 w-4" /> Production Job Card
+            </Button>
+            <label className="flex items-center gap-2 text-sm font-medium cursor-pointer ml-1">
               <Checkbox checked={attachImage} onCheckedChange={(v) => setAttachImage(!!v)} />
               Attach Image
             </label>

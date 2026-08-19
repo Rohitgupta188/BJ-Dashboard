@@ -49,8 +49,6 @@ export default function CustomerView() {
         pageSize: String(PAGE_SIZE),
         search,
       });
-      console.log("Params: ",params);
-      console.log("Params String: ",params.toString());
       
       const res = await fetch(`/api/customers?${params.toString()}`);
       if (!res.ok) throw new Error("Could not load customers.");
@@ -261,7 +259,7 @@ export default function CustomerView() {
         {!loading && !error && customers.length === 0 && (
           <p className="text-center py-10 text-xs text-muted-foreground">No customers yet. Add your first one above.</p>
         )}
-        
+
         {!loading && !error && customers.map((customer) => (
           <div key={customer._id} className="bg-card rounded-[16px] border border-border p-4 flex flex-col gap-3 shadow-sm relative transition-all duration-300 hover:border-primary/30">
             <div className="flex items-center gap-3 pr-12">
@@ -273,33 +271,33 @@ export default function CustomerView() {
                 <p className="text-[11px] text-muted-foreground truncate">{customer.contactName}</p>
               </div>
             </div>
-            
+
             <div className="flex flex-col gap-1.5 text-[11px] text-muted-foreground bg-muted/10 p-3 rounded-xl border border-border/50">
               <div className="flex items-center gap-2 font-mono">
-                <Phone className="h-3 w-3 shrink-0 text-primary/70" /> 
+                <Phone className="h-3 w-3 shrink-0 text-primary/70" />
                 {customer.phone}
               </div>
               {customer.email && (
                 <div className="flex items-center gap-2">
-                  <Mail className="h-3 w-3 shrink-0 text-primary/70" /> 
+                  <Mail className="h-3 w-3 shrink-0 text-primary/70" />
                   <span className="truncate">{customer.email}</span>
                 </div>
               )}
               <div className="flex items-start gap-2">
-                <MapPin className="h-3 w-3 shrink-0 text-primary/70 mt-0.5" /> 
+                <MapPin className="h-3 w-3 shrink-0 text-primary/70 mt-0.5" />
                 <span className="leading-relaxed">{customer.address}</span>
               </div>
             </div>
-            
+
             <div className="absolute top-4 right-4 flex gap-1.5">
-              <button 
-                onClick={() => openEditModal(customer)} 
+              <button
+                onClick={() => openEditModal(customer)}
                 className="h-7 w-7 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center hover:bg-emerald-500/20 transition-colors"
               >
                 <Pencil className="h-3.5 w-3.5" />
               </button>
-              <button 
-                onClick={() => handleDelete(customer._id)} 
+              <button
+                onClick={() => handleDelete(customer._id)}
                 className="h-7 w-7 rounded-full bg-destructive/10 text-destructive flex items-center justify-center hover:bg-destructive/20 transition-colors"
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -338,11 +336,10 @@ export default function CustomerView() {
                       {showEllipsis && <span className="px-1 text-muted-foreground">...</span>}
                       <button
                         onClick={() => setPage(pg)}
-                        className={`h-8 w-8 rounded-lg text-xs font-semibold transition-all duration-200 ${
-                          pg === page
+                        className={`h-8 w-8 rounded-lg text-xs font-semibold transition-all duration-200 ${pg === page
                             ? "bg-primary text-primary-foreground shadow-[0_0_12px_rgba(197,160,89,0.3)]"
                             : "border border-border text-muted-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/30"
-                        }`}
+                          }`}
                       >
                         {pg}
                       </button>
@@ -371,8 +368,8 @@ export default function CustomerView() {
               <h2 className="font-serif text-lg text-primary font-semibold tracking-wide">
                 {editingId ? "Edit Customer Atelier" : "Register Customer"}
               </h2>
-              <button 
-                onClick={closeModal} 
+              <button
+                onClick={closeModal}
                 className="text-muted-foreground hover:text-foreground hover:bg-accent/40 rounded-lg p-1.5 transition-all"
               >
                 <X size={16} />

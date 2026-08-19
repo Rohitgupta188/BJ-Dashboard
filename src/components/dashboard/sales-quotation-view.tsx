@@ -12,36 +12,13 @@ import { useScannerContext } from "@/components/scanner-provider";
 import BluetoothPanel from "@/components/dashboard/bluetooth-panel";
 import type { AdapterStatus } from "@/scanner";
 import QuotationExportModal from "@/components/dashboard/quotation-export-modal";
-
-// ── Types ──────────────────────────────────────────────────────────────────────
-interface Product {
-  sku: string;
-  designNumber: string;
-  collectionLine?: string;
-  itemType?: string;
-  grossWeight?: number;
-  netWeight?: number;
-  stoneWeight?: number;
-  metalPurity?: string;
-  metalType?: string;
-  isInstock?: boolean;
-  storagePath?: string;
-  imageUrl?: string;
-}
-
-interface LineItem {
-  product: Product;
-  qty: number;
-  addedAt: Date;
-}
-
-interface HistoryEntry {
-  sku: string;
-  designNumber: string;
-  scannedAt: Date;
-}
+import { api, ApiError } from "@/lib/api-client";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
+import type { Product, LineItem, HistoryEntry } from "@/types";
+import { useRouter } from "next/navigation";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
+// Product, LineItem, HistoryEntry types are now imported from @/types
 function buildImageUrl(p: Product): string | null {
   if (p.storagePath && process.env.NEXT_PUBLIC_IMAGEKIT_URL_ENDPOINT) {
     return `${process.env.NEXT_PUBLIC_IMAGEKIT_URL_ENDPOINT}/${p.storagePath}`;
@@ -51,45 +28,19 @@ function buildImageUrl(p: Product): string | null {
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 export default function SalesQuotationView() {
+  const router = useRouter();
+
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [flashKey, setFlashKey] = useState(0);
-  const [lineItems, setLineItems] = useState<LineItem[]>([]);
-  const [lineItemsLoaded, setLineItemsLoaded] = useState(false);
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportedQNo, setExportedQNo] = useState<string | null>(null);
   const [manualValue, setManualValue] = useState("");
 
-  // ── LocalStorage hydration ─────────────────────────────────────────────────
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("sales_quotation_line_items");
-      const storedH = localStorage.getItem("sales_quotation_history");
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored) as Array<{ product: Product; addedAt: string; qty?: number }>;
-          setLineItems(parsed.map(i => ({ ...i, addedAt: new Date(i.addedAt), qty: i.qty ?? 1 })));
-        } catch { /* ignore */ }
-      }
-      if (storedH) {
-        try {
-          const parsed = JSON.parse(storedH) as Array<{ sku: string; designNumber: string; scannedAt: string }>;
-          setHistory(parsed.map(h => ({ ...h, scannedAt: new Date(h.scannedAt) })));
-        } catch { /* ignore */ }
-      }
-      setLineItemsLoaded(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (lineItemsLoaded) localStorage.setItem("sales_quotation_line_items", JSON.stringify(lineItems));
-  }, [lineItems, lineItemsLoaded]);
-
-  useEffect(() => {
-    if (lineItemsLoaded) localStorage.setItem("sales_quotation_history", JSON.stringify(history));
-  }, [history, lineItemsLoaded]);
+  // ── Persisted state via useLocalStorage (SSR-safe, no lineItemsLoaded guard) ─
+  const [lineItems, setLineItems] = useLocalStorage<LineItem[]>("sales_quotation_line_items", []);
+  const [history, setHistory] = useLocalStorage<HistoryEntry[]>("sales_quotation_history", []);
 
   // ── Scanner context ────────────────────────────────────────────────────────
   const { statuses, adapterLabels, currentInput, clearInput, requestAdapterConnection, disconnectAdapter, lastScannedSku } = useScannerContext();
@@ -100,18 +51,15 @@ export default function SalesQuotationView() {
     setLoading(true);
     setNotFound(false);
     try {
-      const res = await fetch(`/api/catalog/${encodeURIComponent(sku.trim())}`);
-      if (!res.ok) { setNotFound(true); setProduct(null); return; }
-      const json = await res.json();
-      const item: Product = json.data;
+      // api.get() unwraps the { data: ... } envelope automatically
+      const item = await api.get<Product>(`/api/catalog/${encodeURIComponent(sku.trim())}`);
       setProduct(item);
       setFlashKey(k => k + 1);
       setHistory(prev => [
         { sku: item.sku, designNumber: item.designNumber, scannedAt: new Date() },
         ...prev.filter(p => p.sku !== item.sku).slice(0, 9),
       ]);
-      
-      // Auto-add to quotation
+      // Auto-add to quotation or increment qty
       setLineItems(prev => {
         const existingIdx = prev.findIndex(li => li.product.sku === item.sku);
         if (existingIdx >= 0) {
@@ -121,13 +69,17 @@ export default function SalesQuotationView() {
         }
         return [...prev, { product: item, qty: 1, addedAt: new Date() }];
       });
-    } catch {
+    } catch (err) {
+      // ApiError with NOT_FOUND code or network error — show not-found state
+      if (process.env.NODE_ENV === "development") {
+        console.warn("[fetchProduct] failed:", err instanceof ApiError ? err.message : err);
+      }
       setNotFound(true);
       setProduct(null);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setLineItems, setHistory]);
 
   useEffect(() => {
     if (lastScannedSku?.sku) fetchProduct(lastScannedSku.sku);
@@ -135,16 +87,14 @@ export default function SalesQuotationView() {
 
   // Handle URL query parameter for same-tab navigation
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const scanSku = params.get("scanSku");
-      if (scanSku) {
-        fetchProduct(scanSku);
-        // Clear the URL parameter so it doesn't refetch on refresh
-        window.history.replaceState({}, "", window.location.pathname);
-      }
+    const params = new URLSearchParams(window.location.search);
+    const scanSku = params.get("scanSku");
+    if (scanSku) {
+      fetchProduct(scanSku);
+      window.history.replaceState({}, "", window.location.pathname);
     }
   }, [fetchProduct]);
+
 
   const handleManualKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
@@ -324,9 +274,8 @@ export default function SalesQuotationView() {
                 <p className="text-sm font-semibold text-foreground">Ready to scan</p>
                 <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">
                   Open{" "}
-                  <a href="/scan" target="_blank" rel="noopener noreferrer" className="text-primary font-mono text-[11px] underline-offset-2 hover:underline">
-                    /scan
-                  </a>{" "}on your phone to scan items directly into this quotation.
+                  <button onClick={() => router.push('/scan')} className="">/scan</button>
+                  {" "}on your phone to scan items directly into this quotation.
                 </p>
               </div>
               <div className="flex gap-1.5">
@@ -412,7 +361,7 @@ export default function SalesQuotationView() {
                     <div className="flex-1 min-w-0">
                       <p className="font-mono text-[13px] font-bold text-foreground truncate group-hover:text-[#C5A059] transition-colors">{h.designNumber}</p>
                       <p className="text-[11px] text-muted-foreground font-medium">
-                        {h.scannedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                        {new Date(h.scannedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                       </p>
                     </div>
                     <ChevronRight className="h-4 w-4 text-muted-foreground/30 group-hover:text-[#C5A059] transition shrink-0" />
