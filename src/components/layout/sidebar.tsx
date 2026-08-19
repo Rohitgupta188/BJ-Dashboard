@@ -14,6 +14,7 @@ import {
   BookOpen,
   ScanQrCode,
   X,
+  FileSpreadsheet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -25,6 +26,7 @@ export const sidebarItems = [
   { id: "Products",       icon: Package   },
   { id: "Import & Export",icon: Grid      },
   { id: "Customer",       icon: UserCheck },
+  { id: "Reports",        icon: FileSpreadsheet },
   { id: "Audit",          icon: PieChart  },
   { id: "Messages",       icon: Mail      },
   { id: "Settings",       icon: Settings  },

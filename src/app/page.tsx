@@ -9,6 +9,7 @@ import QuotationsView from "@/components/dashboard/quotation/quotations-view";
 import SalesQuotationView from "@/components/dashboard/sales-quotation-view";
 import OtherViews from "@/components/dashboard/other-views";
 import CustomerView from "@/components/dashboard/customer-view";
+import ReportsView from "@/components/dashboard/reports-view";
 import CartDrawer from "@/components/dashboard/cart-drawer";
 import ProductsTableView from "@/components/dashboard/products-table-view";
 import SettingsView from "@/components/dashboard/settings-view";
@@ -104,6 +105,8 @@ function DashboardContent() {
         return <SalesQuotationView />;
       case "Customer":
         return <CustomerView />;
+      case "Reports":
+        return <ReportsView />;
       case "Import & Export":
         if (user?.role !== "admin") return <div>Unauthorized</div>;
         return <CatalogImportPage />;
