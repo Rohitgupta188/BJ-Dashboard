@@ -11,7 +11,7 @@ export function baseCookieOptions(maxAgeSeconds: number) {
     maxAge: maxAgeSeconds,
     httpOnly: true,
     secure: IS_PRODUCTION,
-    sameSite: "lax" as const,
+    sameSite: "strict" as const,
     path: "/",
   };
 }

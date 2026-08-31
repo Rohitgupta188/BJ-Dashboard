@@ -32,6 +32,7 @@ export type ApiErrorCode =
   | "REQUEST_TIMEOUT"   // AbortError from AbortSignal.timeout()
   | "NETWORK_ERROR"     // fetch() itself threw (offline, DNS, etc.)
   | "SERVER_ERROR"      // 500+
+  | "CONCURRENT_REFRESH"// 409 — token rotation race condition, recoverable
   | "UNKNOWN_ERROR";    // catch-all
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -67,6 +68,7 @@ interface ApiEnvelope<T = unknown> {
   data?: T;
   error?: string;
   details?: unknown;
+  code?: string;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -84,6 +86,8 @@ export interface ApiRequestOptions extends Omit<RequestInit, "signal"> {
    * Will be combined with the timeout signal.
    */
   signal?: AbortSignal;
+  /** Internal use: track retry attempts */
+  _retryCount?: number;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -103,7 +107,10 @@ function devLog(method: string, url: string, durationMs: number, status: number)
    HTTP STATUS → ERROR CODE MAPPING
    ═══════════════════════════════════════════════════════════════════ */
 
-function resolveErrorCode(status: number, bodyError?: string): ApiErrorCode {
+function resolveErrorCode(status: number, bodyError?: string, bodyCode?: string): ApiErrorCode {
+  if (bodyCode === "CONCURRENT_REFRESH") return "CONCURRENT_REFRESH";
+  if (status === 409 && bodyError?.toLowerCase().includes("concurrent refresh")) return "CONCURRENT_REFRESH";
+
   if (status === 401) {
     const lower = (bodyError ?? "").toLowerCase();
     const isSessionError =
@@ -130,7 +137,7 @@ async function apiFetch<T = unknown>(
   url: string,
   options: ApiRequestOptions = {}
 ): Promise<T> {
-  const { timeout = 30_000, signal: externalSignal, body, ...rest } = options;
+  const { timeout = 30_000, signal: externalSignal, body, _retryCount = 0, ...rest } = options;
 
   // ── Build signal (timeout + optional external abort) ─────────────
   let signal: AbortSignal | undefined;
@@ -225,7 +232,15 @@ async function apiFetch<T = unknown>(
   // ── Handle error responses ────────────────────────────────────────
   if (!response.ok) {
     const message = json?.error ?? `HTTP ${response.status}`;
-    const code = resolveErrorCode(response.status, message);
+    const code = resolveErrorCode(response.status, message, json?.code);
+
+    // Bounded retry for concurrent refreshes
+    if (code === "CONCURRENT_REFRESH" && _retryCount < 2) {
+      const delayMs = (_retryCount + 1) * 200; // 200ms, then 400ms
+      console.warn(`[api-client] Concurrent refresh detected. Retrying ${url} in ${delayMs}ms (attempt ${_retryCount + 1})`);
+      await new Promise(r => setTimeout(r, delayMs));
+      return apiFetch(url, { ...options, _retryCount: _retryCount + 1 });
+    }
 
     // Globally handle session expiration in the browser — redirect to login
     if (code === "SESSION_EXPIRED" && typeof window !== "undefined") {

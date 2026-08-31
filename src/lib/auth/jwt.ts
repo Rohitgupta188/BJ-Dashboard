@@ -80,6 +80,7 @@ export async function verifyToken(
   try {
     const { payload } = await jwtVerify(token, getSecretKey(), {
       issuer: JWT_ISSUER,
+      algorithms: ["HS256"],
     });
 
     const typed = payload as unknown as JwtPayload;

@@ -1,9 +1,8 @@
 import { NextRequest } from "next/server";
-import { withAuth, type AuthenticatedRequest } from "@/lib/auth";
+import { withAuth, hashPassword, verifyPassword, type AuthenticatedRequest } from "@/lib/auth";
 import { handleRoute, success, error, unauthorized } from "@/lib/api-response";
 import { connectToDatabase } from "@/lib/db";
 import User from "@/models/User";
-import bcrypt from "bcryptjs";
 
 export const POST = withAuth(async (req: NextRequest, ctx: AuthenticatedRequest) => {
   return handleRoute(async () => {
@@ -20,20 +19,23 @@ export const POST = withAuth(async (req: NextRequest, ctx: AuthenticatedRequest)
 
     await connectToDatabase();
     
-    // Fetch user and explicitly select the password field
-    const user = await User.findById(ctx.user.sub).select("+password");
+    // Fetch user and explicitly select the password field and sessions array
+    const user = await User.findById(ctx.user.sub).select("+password +sessions");
 
     if (!user) {
       return unauthorized("User not found");
     }
 
-    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    const isMatch = await verifyPassword(currentPassword, user.password);
     if (!isMatch) {
       return error("Incorrect current password");
     }
 
-    const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(newPassword, salt);
+    user.password = await hashPassword(newPassword);
+    
+    // Revoke all other sessions to secure the account, but keep the current session active
+    user.sessions = user.sessions.filter(s => s.sessionId === ctx.user.sid);
+
     await user.save();
 
     return success({ message: "Password updated successfully" });

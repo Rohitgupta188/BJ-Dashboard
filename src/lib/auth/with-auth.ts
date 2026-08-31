@@ -5,6 +5,7 @@ import {
 } from "./jwt";
 import { getAccessToken, getRefreshToken, setAuthCookies, clearAuthCookies } from "./cookies";
 import { rotateRefreshToken } from "./auth.service";
+import { checkRefreshRateLimit } from "../rate-limit";
 
 export type AuthenticatedRequest = {
   user: JwtPayload;
@@ -49,11 +50,31 @@ export function withAuth<T = Record<string, unknown>>(
       return response;
     }
 
+    const ip =
+      req.headers.get("x-real-ip") ??
+      req.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
+      "127.0.0.1";
+
+    const isAllowed = await checkRefreshRateLimit(ip);
+    if (!isAllowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        { status: 429 }
+      );
+    }
+
     const refreshResult = await rotateRefreshToken(refreshToken);
 
     if (!refreshResult.ok) {
-      const response = NextResponse.json({ error: refreshResult.error }, { status: refreshResult.status });
-      await clearAuthCookies(response);
+      const isConcurrentRefresh = refreshResult.code === "CONCURRENT_REFRESH";
+      const response = NextResponse.json(
+        { error: refreshResult.error, code: refreshResult.code },
+        { status: refreshResult.status }
+      );
+      
+      if (!isConcurrentRefresh) {
+        await clearAuthCookies(response);
+      }
       return response;
     }
 

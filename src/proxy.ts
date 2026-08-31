@@ -69,6 +69,7 @@ async function isTokenValid(token: string): Promise<boolean> {
   try {
     await jwtVerify(token, getSecret(), {
       issuer: process.env.JWT_ISSUER ?? "BJ-Dashboard",
+      algorithms: ["HS256"],
     });
     return true;
   } catch (err) {

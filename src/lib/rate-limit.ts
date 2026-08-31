@@ -51,3 +51,23 @@ export async function checkGlobalRateLimit(ip: string): Promise<boolean> {
     return true; 
   }
 }
+export const refreshRateLimiter = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(30, "1 m"),
+      analytics: true,
+      prefix: "@upstash/ratelimit/refresh",
+    })
+  : null;
+
+export async function checkRefreshRateLimit(ip: string): Promise<boolean> {
+  if (!refreshRateLimiter) return true;
+
+  try {
+    const { success } = await refreshRateLimiter.limit(ip);
+    return success;
+  } catch (err) {
+    console.warn("Refresh rate limit check failed, allowing request. Error:", err);
+    return true; 
+  }
+}
