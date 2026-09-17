@@ -43,6 +43,7 @@ const PUBLIC_PREFIXES = [
   "/api/auth/logout",
   "/api/drive/webhook", // Specific Drive webhook endpoint (no user session)
   "/api/cron/",         // Vercel cron endpoints (authenticated via CRON_SECRET)
+  "/api/public/catalog",
 ];
 
 const BYPASS_RATE_LIMIT_PATHS = new Set([
