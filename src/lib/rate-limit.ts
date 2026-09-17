@@ -71,3 +71,27 @@ export async function checkRefreshRateLimit(ip: string): Promise<boolean> {
     return true; 
   }
 }
+
+// Public catalog — 60 requests / minute per IP
+// Used exclusively by /api/public/catalog (employee APK sync, no auth)
+
+export const publicCatalogRateLimiter = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(60, "1 m"),
+      analytics: true,
+      prefix: "@upstash/ratelimit/public-catalog",
+    })
+  : null;
+
+export async function checkPublicCatalogRateLimit(ip: string): Promise<boolean> {
+  if (!publicCatalogRateLimiter) return true;
+
+  try {
+    const { success } = await publicCatalogRateLimiter.limit(ip);
+    return success;
+  } catch (err) {
+    console.warn("Public catalog rate limit check failed, allowing request. Error:", err);
+    return true;
+  }
+}
