@@ -5,7 +5,7 @@ export interface ICatalog extends Document {
   designNumber: string;
   rfid: string;
 
-  driveFileId?: string;      
+  driveFileId?: string;
 
   imageName: string;
   storageProvider: "backblaze";
@@ -26,6 +26,12 @@ export interface ICatalog extends Document {
   collectionLine: string;
   metalType: string;
   metalPurity: string;
+
+  // ─── Soft-delete ─────────────────────────────────────────────────────────
+  // Hard deletes are invisible to the mobile delta sync. Use these fields
+  // instead: set deleted=true + bump updatedAt so the delta query finds it.
+  deleted?: boolean;
+  deletedAt?: Date;
 
   createdAt: Date;
   updatedAt: Date;
@@ -135,6 +141,16 @@ const CatalogSchema = new Schema<ICatalog>(
       type: String,
       trim: true,
     },
+
+    deleted: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+
+    deletedAt: {
+      type: Date,
+    },
   },
   {
     timestamps: true,
@@ -164,6 +180,11 @@ CatalogSchema.index({ itemType: 1 });
 CatalogSchema.index({ collectionLine: 1 });
 CatalogSchema.index({ metalPurity: 1 });
 CatalogSchema.index({ metalType: 1 });
+
+CatalogSchema.index(
+  { updatedAt: 1, sku: 1 },
+  { name: "idx_updatedAt_sku_delta" }
+);
 
 const Catalog =
   (models.Catalog as mongoose.Model<ICatalog>) ||
