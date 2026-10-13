@@ -26,7 +26,7 @@ async function compressImage(base64Str: string, maxWidth: number): Promise<strin
     img.onload = () => {
       let w = img.width;
       let h = img.height;
-      
+
       if (w > maxWidth || h > maxWidth) {
         if (w > h) {
           h = Math.round((h * maxWidth) / w);
@@ -36,18 +36,18 @@ async function compressImage(base64Str: string, maxWidth: number): Promise<strin
           h = maxWidth;
         }
       }
-      
+
       const canvas = document.createElement('canvas');
       canvas.width = w;
       canvas.height = h;
       const ctx = canvas.getContext('2d');
       if (!ctx) return resolve(base64Str);
-      
+
       // Fill with white background in case of transparent PNGs
       ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(0, 0, w, h);
       ctx.drawImage(img, 0, 0, w, h);
-      
+
       // Compress to JPEG to aggressively save space
       resolve(canvas.toDataURL('image/jpeg', 0.6));
     };
@@ -106,6 +106,7 @@ export async function buildProductionPDF(params: BuildProductionPDFParams): Prom
     contactName,
     address,
     date,
+    remarks,
     lineItems,
     logoBase64,
   } = params;
@@ -113,20 +114,20 @@ export async function buildProductionPDF(params: BuildProductionPDFParams): Prom
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const pageW = 210;
   const pageH = 297;
-  const margin = 6; // decreased margin for more space
+  const margin = 4; // decreased margin for more space
 
   // Grid Settings
   const cols = 2;
   const colGap = 4;
   const rowGap = 2;
   const cellW = (pageW - 2 * margin - (cols - 1) * colGap) / cols; // ~93mm
-  const cellH = 46;
+  const cellH = 44;
 
   // Image Settings inside cell
-  const imgW = 50; // slightly decreased image width to give text more room
-  const imgH = 44; // keep height within cell
-  const textStartX = imgW + 2; // Offset for text area
-  const textW = cellW - textStartX - 2;
+  const imgW = 55; // slightly decreased image width to give text more room
+  const imgH = 42; // keep height within cell
+  const textStartX = imgW - 2; // Offset for text area
+  const textW = cellW - textStartX;
 
   // Pre-fetch images
   const imageResults = await Promise.all(lineItems.map((item) => item.imageUrl ? getImageDataUrl(item.imageUrl) : Promise.resolve(null)));
@@ -137,13 +138,13 @@ export async function buildProductionPDF(params: BuildProductionPDFParams): Prom
   doc.setFont("helvetica", "italic");
   doc.setFontSize(8);
   doc.setTextColor(197, 160, 89);
-  doc.text(`Job Card No. ${quotationNo}`, pageW - margin, curY, { align: "right" });
-  
+  doc.text(`Q No. ${quotationNo}`, pageW - margin, curY, { align: "right" });
+
   doc.setFont("times", "bold");
   doc.setFontSize(14);
   doc.setTextColor(0, 0, 0);
-  doc.text("PRODUCTION JOB CARD", pageW / 2, curY + 2, { align: "center" });
-  
+  doc.text("QUOTATION", pageW / 2, curY + 2, { align: "center" });
+
   curY += 8;
 
   const tableW = pageW - 2 * margin;
@@ -156,6 +157,7 @@ export async function buildProductionPDF(params: BuildProductionPDFParams): Prom
     [`Contact Name: ${contactName}`],
     [`Customer Address: ${address}`],
     [`Date: ${date}`],
+    // [`Remarks: ${remarks}`],
   ];
 
   doc.setFont("helvetica", "bold");
@@ -163,7 +165,7 @@ export async function buildProductionPDF(params: BuildProductionPDFParams): Prom
 
   const parsedRows = infoRows.map(r => {
     const lines = doc.splitTextToSize(r[0], infoW - 4);
-    return { text: lines, height: Math.max(5, lines.length * 3.5 + 1.5) };
+    return { text: lines, height: Math.max(5, lines.length * 4 + 2) };
   });
 
   const totalH = parsedRows.reduce((sum, r) => sum + r.height, 0);
@@ -191,11 +193,24 @@ export async function buildProductionPDF(params: BuildProductionPDFParams): Prom
 
   if (finalLogo) {
     try {
-      const lW = logoW - 4;
-      const lH = Math.min(lW * 0.6, totalH - 2);
-      const lY = curY + (totalH - lH) / 2;
+      // 1. Get the original dimensions of the logo
+      const imgProps = doc.getImageProperties(finalLogo);
+
+      // 2. Set the maximum space allowed for the logo (Increase or decrease these numbers to change size)
+      const maxLogoWidth = logoW - 4;
+      const maxLogoHeight = totalH - 2;
+
+      // 3. Calculate the ratio to fit the image inside the max space without stretching
+      const ratio = Math.min(maxLogoWidth / imgProps.width, maxLogoHeight / imgProps.height);
+      const renderW = imgProps.width * ratio;
+      const renderH = imgProps.height * ratio;
+
+      // 4. Calculate X and Y to center the logo nicely in the box
+      const lX = logoX + 2 + (maxLogoWidth - renderW) / 2;
+      const lY = curY + (totalH - renderH) / 2;
+
       const format = detectImageFormat(finalLogo);
-      doc.addImage(finalLogo, format, logoX + 2, lY, lW, lH);
+      doc.addImage(finalLogo, format, lX, lY, renderW, renderH);
     } catch { /* skip */ }
   } else {
     doc.setFont("times", "bold");
@@ -204,8 +219,24 @@ export async function buildProductionPDF(params: BuildProductionPDFParams): Prom
     doc.text("Brahammand\nJewellery", logoX + logoW / 2, curY + totalH / 2, { align: "center", baseline: "middle" });
     doc.setTextColor(0, 0, 0);
   }
+  let remarksHeight = 0;
 
-  curY += totalH + 6;
+  // Only draw this box if 'remarks' exists and isn't just empty spaces
+  if (remarks && remarks.trim() !== "") {
+    const remarksText = `Remarks: ${remarks}`;
+    const remarksLines = doc.splitTextToSize(remarksText, tableW - 4);
+    remarksHeight = Math.max(6, remarksLines.length * 4.5 + 1.5);
+
+    // Draw a full-width rectangle below the top header
+    const remarksY = curY + totalH;
+    doc.rect(margin, remarksY, tableW, remarksHeight);
+    doc.text(remarksLines, margin + 2, remarksY + 3.5); // Write the text
+  }
+
+  // Update the final Y position for the products grid
+  // (If remarks is empty, remarksHeight is 0, so it skips the extra space!)
+  curY += totalH + remarksHeight + 6;
+
 
   // --- DRAW GRID ---
   for (let i = 0; i < lineItems.length; i++) {
@@ -216,20 +247,20 @@ export async function buildProductionPDF(params: BuildProductionPDFParams): Prom
     if (curY + cellH > pageH - margin) {
       doc.addPage();
       curY = margin;
-      
+
       // Minimal header on subsequent pages
       doc.setFont("helvetica", "italic");
       doc.setFontSize(8);
       doc.setTextColor(197, 160, 89);
-      doc.text(`Job Card No. ${quotationNo}`, pageW - margin, curY + 3, { align: "right" });
+      doc.text(`Q No. ${quotationNo}`, pageW - margin, curY + 3, { align: "right" });
       curY += 8;
     }
 
     const colIdx = i % cols;
     const cx = margin + colIdx * (cellW + colGap);
-    
+
     // Draw outer cell bottom border only
-    doc.setDrawColor(0, 0, 0);
+    doc.setDrawColor(150, 150, 150);
     doc.setLineWidth(0.3);
     doc.line(cx, curY + cellH, cx + cellW, curY + cellH);
 
@@ -240,7 +271,7 @@ export async function buildProductionPDF(params: BuildProductionPDFParams): Prom
         const ratio = Math.min((imgW - 2) / imgData.width, (imgH - 2) / imgData.height);
         const renderW = imgData.width * ratio;
         const renderH = imgData.height * ratio;
-        const xOff = cx + 1 + (imgW - 2 - renderW) / 2;
+        const xOff = cx + (imgW - 2 - renderW) / 2;
         const yOff = curY + 1 + (imgH - 2 - renderH) / 2;
         doc.addImage(imgData.base64, format, xOff, yOff, renderW, renderH);
       } catch {
@@ -257,8 +288,15 @@ export async function buildProductionPDF(params: BuildProductionPDFParams): Prom
     }
 
     // Vertical line separating image and text
-    doc.setLineWidth(0.15);
-    doc.line(cx + imgW, curY, cx + imgW, curY + cellH);
+    // doc.setLineWidth(0.15);
+    // doc.line(cx + imgW, curY, cx + imgW, curY + cellH);
+
+    // Draw a vertical line between Column 1 and Column 2
+    if (colIdx === 0) {
+      const middleX = cx + cellW + (colGap / 2);
+      doc.setDrawColor(150, 150, 150);
+      doc.line(middleX, curY, middleX, curY + cellH);
+    }
 
     // --- Text Area ---
     doc.setTextColor(0, 0, 0);
@@ -267,64 +305,64 @@ export async function buildProductionPDF(params: BuildProductionPDFParams): Prom
 
     // Checkboxes Row (CAM, WAX, CAST)
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.5);
-    const boxSize = 3;
-    
+    doc.setFontSize(7.5);
+    const boxSize = 3.5;
+
     // CAM
     doc.rect(tx, ty - 2.5, boxSize, boxSize);
-    doc.text("CAM", tx + boxSize + 1, ty);
-    
+    doc.text("CAM", tx + boxSize + 1.2, ty);
+
     // WAX
-    const waxX = tx + 11;
+    const waxX = tx + 15;
     doc.rect(waxX, ty - 2.5, boxSize, boxSize);
-    doc.text("WAX", waxX + boxSize + 1, ty);
-    
+    doc.text("WAX", waxX + boxSize + 1.2, ty);
+
     // CAST
-    const castX = tx + 22;
+    const castX = tx + 30;
     doc.rect(castX, ty - 2.5, boxSize, boxSize);
-    doc.text("CAST", castX + boxSize + 1, ty);
+    doc.text("CAST", castX + boxSize + 1.2, ty);
 
     // Divider line below checkboxes
     ty += 2.5;
     doc.setDrawColor(200, 200, 200);
     doc.line(tx, ty, cx + cellW, ty);
-    
+
     ty += 4;
-    
+
     // Text styling
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.5);
-    
+    doc.setFontSize(8);
+
     const lineHeight = 4.2; // Slightly tighter line height to fit line-by-line comfortably
     const kt = li.metalPurity?.replace(/[^0-9]/g, "") || "18";
     const color = li.metalType?.charAt(0).toUpperCase() || "Y";
 
     // Write all properties
     doc.setFont("helvetica", "bold");
-    doc.text(`Design No: ${li.designNumber || "-"}`, tx, ty);
-    doc.setFont("helvetica", "normal");
+    doc.text(`Design No : ${li.designNumber || "-"}`, tx, ty + 0.5);
+    doc.setFont("helvetica", "bold");
     ty += lineHeight;
 
     // Gross Wt & Karat on one line (2 columns)
     const col2X = tx + 25; // Increased gap for 2nd column
-    doc.text(`Gross Wt: ${(li.grossWeight ?? 0).toFixed(3)}`, tx, ty);
-    doc.text(`Karat: ${kt}K`, col2X, ty); 
+    doc.text(`Gross Wt : ${(li.grossWeight ?? 0).toFixed(3)}`, tx, ty + 0.5);
+    doc.text(`Karat : ${kt}K`, col2X, ty + 0.5);
     ty += lineHeight;
-    
+
     // Net Wt & Color on one line (2 columns)
-    doc.text(`Net Wt: ${(li.netWeight ?? 0).toFixed(3)}`, tx, ty);
-    doc.text(`Color: ${color}`, col2X, ty); 
+    doc.text(`Net Wt : ${(li.netWeight ?? 0).toFixed(3)}`, tx, ty + 0.5);
+    doc.text(`Color : ${color}`, col2X, ty + 0.5);
     ty += lineHeight;
 
     // Stone Wt & Quantity on one line (2 columns)
-    doc.text(`Stone Wt: ${(li.stoneWeight ?? 0).toFixed(3)}`, tx, ty);
-    doc.text(`Quantity: ${li.qty ?? 1}`, col2X, ty); 
+    doc.text(`Stone Wt : ${(li.stoneWeight ?? 0).toFixed(3)}`, tx, ty + 0.5);
+    doc.text(`Quantity : ${li.qty ?? 1}`, col2X, ty + 0.5);
     ty += lineHeight;
 
     // Row 5: Remarks (Full width, can wrap)
     if (li.remarks) {
       const lines = doc.splitTextToSize(`Remarks: ${li.remarks}`, textW - 1);
-      doc.text(lines, tx, ty);
+      doc.text(lines, tx, ty + 1);
     }
 
     // Advance Y only if we completed a row (every 2 items)
@@ -334,5 +372,8 @@ export async function buildProductionPDF(params: BuildProductionPDFParams): Prom
   }
 
   // Save the PDF
-  doc.save(`${quotationNo || "Production_JobCard"}.pdf`);
+  // doc.save(`${quotationNo || "Production_JobCard"}.pdf`);
+  // Open the PDF in a new tab for preview
+  window.open(doc.output('bloburl'), '_blank');
+
 }
