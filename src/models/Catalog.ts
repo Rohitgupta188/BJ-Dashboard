@@ -22,6 +22,8 @@ export interface ICatalog extends Document {
   grossWeight: number;
   netWeight: number;
   stoneWeight: number;
+  reserved1?: number;
+  reserved3?: number;
 
   collectionLine: string;
   metalType: string;
@@ -125,6 +127,18 @@ const CatalogSchema = new Schema<ICatalog>(
     stoneWeight: {
       type: Number,
       min: 0,
+    },
+
+    reserved1: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+
+    reserved3: {
+      type: Number,
+      min: 0,
+      default: 0,
     },
 
     collectionLine: {
