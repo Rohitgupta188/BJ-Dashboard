@@ -128,6 +128,8 @@ export const POST = withAuth(async (req: NextRequest, _ctx: AuthenticatedRequest
               grossWeight:    row.grossWeight,
               netWeight:      row.netWeight,
               stoneWeight:    row.stoneWeight,
+              ...(row.reserved1 !== undefined && { reserved1: row.reserved1 }),
+              ...(row.reserved3 !== undefined && { reserved3: row.reserved3 }),
               metalPurity:    row.metalPurity,
               metalType:      row.metalType,
               itemType:       row.itemType,
@@ -138,6 +140,14 @@ export const POST = withAuth(async (req: NextRequest, _ctx: AuthenticatedRequest
               itemStatus,
               isCatalog,
               isInstock,
+              // bulkWrite bypasses Mongoose timestamps middleware — set explicitly.
+              updatedAt: new Date(),
+            },
+            $setOnInsert: {
+              // Ensure new documents get a createdAt on first upsert.
+              createdAt: new Date(),
+              ...(row.reserved1 === undefined && { reserved1: 0 }),
+              ...(row.reserved3 === undefined && { reserved3: 0 }),
             },
           },
           upsert: true,
@@ -183,6 +193,8 @@ export const POST = withAuth(async (req: NextRequest, _ctx: AuthenticatedRequest
               grossWeight:    row.grossWeight,
               netWeight:      row.netWeight,
               stoneWeight:    row.stoneWeight,
+              reserved1:      row.reserved1 ?? 0,
+              reserved3:      row.reserved3 ?? 0,
               metalPurity:    row.metalPurity,
               metalType:      row.metalType,
               itemType:       row.itemType,
@@ -193,6 +205,9 @@ export const POST = withAuth(async (req: NextRequest, _ctx: AuthenticatedRequest
               itemStatus,
               isCatalog,
               isInstock,
+              // bulkWrite bypasses Mongoose timestamps middleware — set explicitly.
+              createdAt: new Date(),
+              updatedAt: new Date(),
             },
           },
         }));
