@@ -14,6 +14,8 @@ export interface Product {
   grossWeight?: number;
   netWeight?: number;
   stoneWeight?: number;
+  reserved1?: number;
+  reserved3?: number;
   metalPurity?: string;
   metalType?: string;
   isInstock?: boolean;
