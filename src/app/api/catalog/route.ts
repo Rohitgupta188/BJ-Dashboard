@@ -78,7 +78,7 @@ export const GET = withAuth(async (request: NextRequest) => {
     const [items, total] = await Promise.all([
       Catalog.find(filter)
         .select(
-          "designNumber rfid sku itemStatus isCatalog isInstock itemType grossWeight netWeight collectionLine metalType metalPurity imageUrl -_id"
+          "designNumber rfid sku itemStatus isCatalog isInstock itemType grossWeight netWeight stoneWeight reserved1 reserved3 collectionLine metalType metalPurity imageUrl -_id"
         )
         .sort({ designNumber: 1 })
         .skip(skip)
