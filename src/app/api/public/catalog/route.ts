@@ -30,7 +30,7 @@ function badRequest(message: string): NextResponse {
 
 const PUBLIC_PROJECTION =
   "sku designNumber rfid imageName imageUrl itemStatus isCatalog isInstock " +
-  "itemType grossWeight netWeight stoneWeight collectionLine metalType metalPurity " +
+  "itemType grossWeight netWeight stoneWeight reserved1 reserved3 collectionLine metalType metalPurity " +
   "deleted deletedAt updatedAt -_id";
 
 export function OPTIONS(): NextResponse {
