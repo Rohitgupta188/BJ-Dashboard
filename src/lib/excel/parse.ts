@@ -36,6 +36,8 @@ export interface NormalizedRow {
 
   collectionLine: string;
   stoneWeight:    number;
+  reserved1?:     number;
+  reserved3?:     number;
   size:           number;
   itemCategory:   string;
 }
@@ -164,6 +166,19 @@ export async function parseExcelBuffer(buffer: Buffer): Promise<ExcelParseResult
   const optCol = (row: ExcelJS.Row, name: string): ExcelJS.Cell | null =>
     headers.has(name) ? row.getCell(headers.get(name)!) : null;
 
+  const findColIndex = (...candidates: string[]): number | undefined => {
+    for (const name of candidates) {
+      if (headers.has(name)) return headers.get(name);
+      for (const [key, idx] of headers.entries()) {
+        if (key.toLowerCase() === name.toLowerCase()) return idx;
+      }
+    }
+    return undefined;
+  };
+
+  const r1ColIndex = findColIndex("Reserved 1", "Reserved1");
+  const r3ColIndex = findColIndex("Reserved 3", "Reserved3");
+
   // ── Row count guard ───────────────────────────────────────────────────────
   const actualRowCount = ws.actualRowCount - 1; // subtract header row
   if (actualRowCount > MAX_ROWS) {
@@ -232,6 +247,10 @@ export async function parseExcelBuffer(buffer: Buffer): Promise<ExcelParseResult
       const c = optCol(row, name);
       return c ? cellNumber(c) : 0;
     };
+    const optNumByIndex = (colIdx?: number): number | undefined => {
+      if (colIdx === undefined) return undefined;
+      return cellNumber(row.getCell(colIdx));
+    };
 
     rows.push({
       rowNumber,
@@ -247,6 +266,8 @@ export async function parseExcelBuffer(buffer: Buffer): Promise<ExcelParseResult
       metalPurity:    truncate(cellText(col(row, "Metal Purity")),  "Metal Purity", rowNumber),
       collectionLine: optText("Collection Line"),
       stoneWeight:    optNum("Stone Weight"),
+      reserved1:      optNumByIndex(r1ColIndex),
+      reserved3:      optNumByIndex(r3ColIndex),
       size:           optNum("Size"),
       itemCategory:   optText("Item Category"),
     });
