@@ -1,19 +1,11 @@
-import ImageKit from "imagekit";
-
-if (
-  !process.env.IMAGEKIT_PUBLIC_KEY ||
-  !process.env.IMAGEKIT_PRIVATE_KEY ||
-  !process.env.IMAGEKIT_URL_ENDPOINT
-) {
-  throw new Error(
-    "Missing ImageKit env vars. Check IMAGEKIT_PUBLIC_KEY, IMAGEKIT_PRIVATE_KEY, IMAGEKIT_URL_ENDPOINT in .env.local"
-  );
-}
-
-export const imagekit = new ImageKit({
-  publicKey: process.env.IMAGEKIT_PUBLIC_KEY,
-  privateKey: process.env.IMAGEKIT_PRIVATE_KEY,
-  urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT,
-});
-
-export const DEFAULT_UPLOAD_FOLDER = "catalog";
+/**
+ * DEAD CODE — imageKit.ts is not imported anywhere.
+ *
+ * We switched to Backblaze B2 (backblaze.ts) for all image storage.
+ * The ImageKit SDK is no longer used server-side; IMAGEKIT_URL_ENDPOINT is
+ * still used as a CDN URL prefix in drive/processors/images.ts.
+ *
+ * This file is kept as a stub so the `imagekit` npm package import
+ * doesn't cause a build error if the package is present.
+ * If you re-enable ImageKit, delete this comment and restore the export.
+ */
