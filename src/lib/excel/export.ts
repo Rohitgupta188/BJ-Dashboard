@@ -10,6 +10,9 @@ export interface CatalogExportRow {
   size:           number | string;
   grossWeight:    number;
   netWeight:      number;
+  stoneWeight?:   number;
+  reserved1?:     number;
+  reserved3?:     number;
   collectionLine: string;
   itemCategory:   string;
   metalType:      string;
@@ -27,6 +30,9 @@ const COLUMNS: { header: string; key: keyof CatalogExportRow; width: number }[] 
   { header: "Size",            key: "size",           width:  8 },
   { header: "Gross Weight",    key: "grossWeight",    width: 13 },
   { header: "Net Weight",      key: "netWeight",      width: 12 },
+  { header: "Stone Weight",    key: "stoneWeight",    width: 12 },
+  { header: "Reserved 1",      key: "reserved1",      width: 12 },
+  { header: "Reserved 3",      key: "reserved3",      width: 12 },
   { header: "Collection Line", key: "collectionLine", width: 18 },
   { header: "Item Category",   key: "itemCategory",   width: 16 },
   { header: "Metal Type",      key: "metalType",      width: 12 },
