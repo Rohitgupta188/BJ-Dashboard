@@ -49,8 +49,17 @@ export const DELETE = withAuth(async (
     if (!sku) return NextResponse.json({ error: "sku required" }, { status: 400 });
 
     await connectToDatabase();
-    const result = await Catalog.deleteOne({ sku: decodeURIComponent(sku) });
-    if (result.deletedCount === 0) {
+
+    // Soft-delete: set deleted=true + bump updatedAt so the mobile delta
+    // query discovers this record and removes it from the local SQLite DB.
+    // Hard purges (Catalog.deleteOne) are reserved for admin data-cleanup scripts.
+    const now = new Date();
+    const result = await Catalog.findOneAndUpdate(
+      { sku: decodeURIComponent(sku) },
+      { $set: { deleted: true, deletedAt: now, updatedAt: now } },
+      { returnDocument: "after" }
+    );
+    if (!result) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
     return NextResponse.json({ success: true });
@@ -60,12 +69,13 @@ export const DELETE = withAuth(async (
   }
 }, { requireRole: "admin" });
 
+
 // Fields that admin is allowed to update via PATCH.
 // Whitelist prevents accidental/malicious writes to system fields
 // like imageMd5, storagePath, storageProvider, _id, etc.
 const PATCHABLE_FIELDS = new Set([
   "itemStatus", "itemType", "isCatalog", "isInstock",
-  "grossWeight", "netWeight", "stoneWeight",
+  "grossWeight", "netWeight", "stoneWeight", "reserved1", "reserved3",
   "collectionLine", "metalType", "metalPurity",
   "imageName", "imageUrl",
 ]);
