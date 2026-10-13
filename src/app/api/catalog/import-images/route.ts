@@ -128,7 +128,9 @@ export const POST = withAuth(async (req: NextRequest, _ctx: AuthenticatedRequest
 
         await Catalog.updateMany(
           { _id: { $in: matchedIds } },
-          { $set: { imageUrl, storagePath: objectKey, storageProvider: "backblaze" } }
+          // updateMany bypasses Mongoose timestamps — bump updatedAt explicitly
+          // so mobile delta sync picks up the image URL change.
+          { $set: { imageUrl, storagePath: objectKey, storageProvider: "backblaze", updatedAt: new Date() } }
         );
 
         // ── Backfill siblings with same designNumber ──────────────────────────
@@ -137,7 +139,8 @@ export const POST = withAuth(async (req: NextRequest, _ctx: AuthenticatedRequest
             designNumber: { $in: designNumbers },
             $or: [{ imageUrl: { $exists: false } }, { imageUrl: null }, { imageUrl: "" }],
           },
-          { $set: { imageUrl, storagePath: objectKey, storageProvider: "backblaze" } }
+          // updateMany bypasses Mongoose timestamps — bump updatedAt explicitly.
+          { $set: { imageUrl, storagePath: objectKey, storageProvider: "backblaze", updatedAt: new Date() } }
         );
 
         totalUploaded++;
