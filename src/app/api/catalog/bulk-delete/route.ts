@@ -23,8 +23,15 @@ export const POST = withAuth(async (req: NextRequest) => {
       );
     }
 
-    const result = await Catalog.deleteMany({ sku: { $in: skus } });
+    // Soft-delete: set deleted=true + bump updatedAt so the mobile delta
+    // query discovers these records and removes them from the local SQLite DB.
+    // updateMany bypasses Mongoose timestamps middleware — bump updatedAt explicitly.
+    const now = new Date();
+    const result = await Catalog.updateMany(
+      { sku: { $in: skus } },
+      { $set: { deleted: true, deletedAt: now, updatedAt: now } }
+    );
 
-    return NextResponse.json({ success: true, deletedCount: result.deletedCount });
+    return NextResponse.json({ success: true, deletedCount: result.modifiedCount });
   });
 }, { requireRole: "admin" });
