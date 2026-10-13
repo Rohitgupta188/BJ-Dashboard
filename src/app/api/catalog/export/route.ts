@@ -30,8 +30,8 @@ export async function GET(req: NextRequest) {
 
     const docs = await Catalog.find({ itemStatus })
       .select(
-        "designNumber sku grossWeight netWeight metalPurity metalType " +
-        "itemType rfid collectionLine stoneWeight imageName itemStatus"
+        "designNumber sku grossWeight netWeight stoneWeight reserved1 reserved3 metalPurity metalType " +
+        "itemType rfid collectionLine imageName itemStatus"
       )
       .sort({ designNumber: 1 })
       .lean();
@@ -53,6 +53,9 @@ export async function GET(req: NextRequest) {
       size:           (doc as any).size  ?? "",
       grossWeight:    doc.grossWeight    ?? 0,
       netWeight:      doc.netWeight      ?? 0,
+      stoneWeight:    doc.stoneWeight    ?? 0,
+      reserved1:      doc.reserved1      ?? 0,
+      reserved3:      doc.reserved3      ?? 0,
       collectionLine: doc.collectionLine ?? "",
       itemCategory:   (doc as any).itemCategory ?? "",
       metalType:      doc.metalType      ?? "",
