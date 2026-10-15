@@ -210,7 +210,7 @@ export async function rotateRefreshToken(refreshToken: string): Promise<AuthResu
         "sessions.$.refreshTokenRotatedAt": new Date()
       }
     },
-    { new: true }
+    { returnDocument: "after" }
   ).select("+sessions");
 
   if (updatedUser) {
