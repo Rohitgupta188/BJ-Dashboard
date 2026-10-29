@@ -70,31 +70,7 @@ export async function processCustomerSheet(
   const sheets = getSheetsClient();
   const errors: string[] = [];
 
-  // ── 1. Find the customer registration tab ─────────────────────────────────
-  const metaRes = await withDriveRetry(
-    () => sheets.spreadsheets.get({ spreadsheetId }),
-    `sheets.get ${spreadsheetId}`
-  );
-  const allSheets = metaRes.data.sheets ?? [];
-
-  const customerSheet = allSheets.find((s) => {
-    const title = s.properties?.title?.toLowerCase() ?? "";
-    return (
-      title.includes("new customer registration") ||
-      title === "customer registrations"
-    );
-  });
-
-  if (!customerSheet) {
-    const tabNames = allSheets.map((s) => s.properties?.title ?? "").join(", ");
-    console.warn(
-      `[drive/sheets] No customer registration tab found in spreadsheet. ` +
-      `Available tabs: ${tabNames} — skipping.`
-    );
-    return { upserted: 0, skipped: 0, errors: [] };
-  }
-
-  const sheetTitle = customerSheet.properties!.title!;
+  const sheetTitle = "Customers";
 
   // ── 2. Fetch raw row data ──────────────────────────────────────────────────
   const dataRes = await withDriveRetry(
