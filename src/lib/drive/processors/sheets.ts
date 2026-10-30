@@ -86,8 +86,7 @@ export async function processCustomerSheet(
 
   // ── 3. Content hash guard ──────────────────────────────────────────────────
   // Hash the raw Sheets row data for this tab only.
-  // If another tab changed but this one is identical → skip the full sync.
-  // .lean() returns Maps as plain objects — use bracket notation, not .get().
+  // If the sheet content is identical to last sync → skip completely.
   const contentHash = createHash("sha256")
     .update(JSON.stringify(rows))
     .digest("hex");
@@ -95,11 +94,14 @@ export async function processCustomerSheet(
   const channel = await DriveChannel.findById("main")
     .select("lastSheetHash")
     .lean();
-  const lastHash = (channel?.lastSheetHash as Record<string, string> | undefined)?.[spreadsheetId];
+  const sheetHashes = channel?.lastSheetHash as Record<string, string> | undefined;
+  const lastHash = sheetHashes instanceof Map
+    ? (sheetHashes as any).get(spreadsheetId)
+    : sheetHashes?.[spreadsheetId];
 
   if (lastHash === contentHash) {
     console.log(
-      `[drive/sheets] "${sheetTitle}" → Skipped ✓ (content unchanged, another tab edited)`
+      `[drive/sheets] "${sheetTitle}" → Skipped ✓ (content unchanged)`
     );
     return { upserted: 0, skipped: 0, errors: [] };
   }
@@ -150,9 +152,10 @@ export async function processCustomerSheet(
 
   // ── 5. Single bulkWrite for all valid records ──────────────────────────────
   // upsert by phone: if a customer's phone already exists, update fields.
-  // ordered: false — continue on individual write errors (e.g. duplicate key
-  // on a race) so one bad row doesn't abort the rest.
-  let upserted = 0;
+  // ordered: false — continue on individual write errors so one bad row doesn't abort the rest.
+  let inserted = 0;
+  let modified = 0;
+  let matched = 0;
 
   if (validRecords.length > 0) {
     const bulkOps = validRecords.map((record) => ({
@@ -165,12 +168,15 @@ export async function processCustomerSheet(
 
     try {
       const result = await Customer.bulkWrite(bulkOps, { ordered: false });
-      // upsertedCount = new docs inserted; modifiedCount = existing docs updated.
-      upserted = result.upsertedCount + result.modifiedCount;
+      inserted = result.upsertedCount ?? 0;
+      modified = result.modifiedCount ?? 0;
+      matched = result.matchedCount ?? 0;
     } catch (err: any) {
       // BulkWriteError with partial success (ordered: false) — salvage result.
       if (err?.result && Array.isArray(err?.writeErrors)) {
-        upserted = (err.result.nUpserted ?? 0) + (err.result.nModified ?? 0);
+        inserted = err.result.nUpserted ?? 0;
+        modified = err.result.nModified ?? 0;
+        matched = err.result.nMatched ?? 0;
         for (const we of (err.writeErrors as Array<{ index: number; errmsg?: string; code?: number }>).slice(0, 10)) {
           errors.push(`Row ${we.index + 2}: ${we.errmsg ?? `code ${we.code}`}`);
         }
@@ -184,9 +190,12 @@ export async function processCustomerSheet(
     }
   }
 
+  const upserted = inserted + modified;
+  const unchanged = Math.max(0, matched - modified);
+
   console.log(
     `[drive/sheets] "${sheetTitle}" → ` +
-    `upserted=${upserted} skipped=${skipped} errors=${errors.length} ` +
+    `inserted=${inserted} modified=${modified} unchanged=${unchanged} skipped=${skipped} errors=${errors.length} ` +
     `(from ${validRecords.length} valid / ${rows.length - 1} total rows)`
   );
 
