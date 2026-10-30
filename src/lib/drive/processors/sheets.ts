@@ -161,8 +161,12 @@ export async function processCustomerSheet(
     const bulkOps = validRecords.map((record) => ({
       updateOne: {
         filter: { phone: record.phone },
-        update: { $set: record },
+        update: {
+          $set: record,
+          $setOnInsert: { createdAt: new Date() },
+        },
         upsert: true,
+        timestamps: false,
       },
     }));
 
