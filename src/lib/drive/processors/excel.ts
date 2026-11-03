@@ -210,14 +210,27 @@ export async function processExcelFile(
         try {
           console.log(`[drive/excel] ImageIndex hit: ${candidate} → fileId=${indexed.fileId}`);
 
-          const dlRes = await withDriveRetry(
-            () => drive5b.files.get({ fileId: indexed.fileId, alt: "media" }, { responseType: "arraybuffer" }),
-            `drive/excel fallback ${indexed.imageName}`
-          );
-          const buf = Buffer.from(dlRes.data as ArrayBuffer);
-          const contentType = getContentType(indexed.imageName);
-          const { key: objectKey } = await uploadBufferToBackblaze(buf, indexed.imageName, contentType);
-          const imageUrl = `${IMAGEKIT_URL_ENDPOINT.replace(/\/$/, "")}/${objectKey}`;
+          let imageUrl: string;
+          let objectKey: string;
+
+          if (indexed.imageUrl && indexed.backblazePath) {
+            // Image was already uploaded to B2 by processImageFile — reuse directly.
+            // No Drive download or B2 upload needed.
+            imageUrl  = indexed.imageUrl;
+            objectKey = indexed.backblazePath;
+            console.log(`[drive/excel]   → pre-uploaded, reusing B2 object`);
+          } else {
+            // Not yet in B2 — download from Drive and upload now.
+            const dlRes = await withDriveRetry(
+              () => drive5b.files.get({ fileId: indexed.fileId, alt: "media" }, { responseType: "arraybuffer" }),
+              `drive/excel fallback ${indexed.imageName}`
+            );
+            const buf = Buffer.from(dlRes.data as ArrayBuffer);
+            const contentType = getContentType(indexed.imageName);
+            const uploadResult = await uploadBufferToBackblaze(buf, indexed.imageName, contentType);
+            objectKey = uploadResult.key;
+            imageUrl = `${IMAGEKIT_URL_ENDPOINT.replace(/\/$/, "")}/${objectKey}`;
+          }
 
           // Update Catalog docs that share this image — collation index, no regex.
           const nameBase = path.basename(indexed.imageName, path.extname(indexed.imageName));
@@ -231,6 +244,8 @@ export async function processExcelFile(
             { $set: { imageUrl, storageProvider: "backblaze", storagePath: objectKey, imageName: indexed.imageName } }
           ).collation(CATALOG_COLLATION);
 
+          // Remove the temporary ImageIndex entry — the catalog now owns the image.
+          // The B2 object is kept because the catalog record still references it.
           await deleteFromImageIndex(indexed.fileId);
 
           row.imageUrl = imageUrl;

@@ -71,12 +71,12 @@ export async function processImageFile(
     return;
   }
 
-  // Guard: if NO Catalog row references this design at all, skip the B2 upload.
-  // The image arrived before the Excel was imported — park it in ImageIndex instead
-  // (handled by maybeIndexNewImage after this function returns) and let the Excel
-  // fallback download + upload when the SKU actually exists.
-  // Without this guard, the same image would be uploaded to B2 twice:
-  //   once here (with nothing in Catalog to point to it) and once by the Excel fallback.
+  // ── No Catalog row yet — upload to B2 and park in ImageIndex ────────────────
+  // The image arrived before the Excel was imported. Instead of deferring,
+  // upload now so the imageUrl is immediately available to other apps
+  // (Cloud Printer, Manual Order Place) while the catalog record is missing.
+  // When the catalog record arrives later, the Excel processor reuses the
+  // already-uploaded URL from ImageIndex and deletes the temporary record.
   const hasCatalogRow = await Catalog.exists({
     $or: [
       { designNumber: designNumber },
@@ -85,8 +85,51 @@ export async function processImageFile(
   }).collation(CATALOG_COLLATION);
 
   if (!hasCatalogRow) {
-    console.log(`[drive/images] ${fileName} → No Catalog row yet — deferring to ImageIndex`);
-    return; // maybeIndexNewImage will park it
+    const parentFolderId = file.parents?.[0] ?? "";
+
+    const drive = getDriveClient();
+    const downloadRes = await withDriveRetry(
+      () => drive.files.get({ fileId, alt: "media" }, { responseType: "arraybuffer" }),
+      `drive/images ${fileName}`
+    );
+    const buffer      = Buffer.from(downloadRes.data as ArrayBuffer);
+    const contentType = getContentType(fileName);
+
+    try {
+      const uploadRes = await uploadBufferToBackblaze(buffer, fileName, contentType);
+      const objectKey = uploadRes.key;
+      const imageUrl  = `${IMAGEKIT_URL_ENDPOINT.replace(/\/$/, "")}/${objectKey}`;
+
+      await upsertImageIndex({
+        fileId,
+        imageName:      fileName,
+        mimeType:       mimeType,
+        parentFolderId,
+        backblazePath:  objectKey,
+        imageUrl,
+        imageMd5:       md5Checksum,
+        uploadStatus:   "UPLOADED",
+      });
+
+      console.log(
+        `[drive/images] ${fileName} → No Catalog row — uploaded to B2, parked in ImageIndex (${imageUrl})`
+      );
+    } catch (err) {
+      // B2 upload failed — park in imageIndex without URL for retry.
+      // The backfill script or next Drive notification will retry the upload.
+      await upsertImageIndex({
+        fileId,
+        imageName:      fileName,
+        mimeType:       mimeType,
+        parentFolderId,
+        uploadStatus:   "PENDING",
+      });
+      console.warn(
+        `[drive/images] ${fileName} → B2 upload failed (no Catalog row) — parked for retry:`,
+        err instanceof Error ? err.message : err
+      );
+    }
+    return;
   }
 
   const drive = getDriveClient();

@@ -1,10 +1,14 @@
 import mongoose, { Schema, Document, models, model } from "mongoose";
 
 export interface IImageIndex extends Document {
-  fileId:         string; 
-  imageName:      string; 
-  mimeType:       string;  
-  parentFolderId: string; 
+  fileId:         string;
+  imageName:      string;
+  mimeType:       string;
+  parentFolderId: string;
+  backblazePath:  string | null;
+  imageUrl:       string | null;
+  imageMd5:       string | null;
+  uploadStatus:   "PENDING" | "UPLOADING" | "UPLOADED" | "FAILED";
   createdAt:      Date;
   updatedAt:      Date;
 }
@@ -32,6 +36,25 @@ const ImageIndexSchema = new Schema<IImageIndex>(
       required: true,
       trim:     true,
     },
+    backblazePath: {
+      type:    String,
+      default: null,
+    },
+    imageUrl: {
+      type:    String,
+      default: null,
+    },
+    imageMd5: {
+      type:    String,
+      default: null,
+      trim:    true,
+    },
+    uploadStatus: {
+      type:     String,
+      enum:     ["PENDING", "UPLOADING", "UPLOADED", "FAILED"],
+      default:  "PENDING",
+      required: true,
+    },
   },
   {
     timestamps:  true,
@@ -41,10 +64,11 @@ const ImageIndexSchema = new Schema<IImageIndex>(
 
 ImageIndexSchema.index(
   { imageName: 1 },
-  { collation: { locale: "en", strength: 2 } } 
+  { collation: { locale: "en", strength: 2 } }
 );
 
 ImageIndexSchema.index({ parentFolderId: 1 });
+ImageIndexSchema.index({ uploadStatus: 1 });
 
 const ImageIndex =
   (models.ImageIndex as mongoose.Model<IImageIndex>) ||
